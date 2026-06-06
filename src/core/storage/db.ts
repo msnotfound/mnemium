@@ -117,8 +117,8 @@ async function readSchemaForBrowser(): Promise<string> {
 
 async function tryLoadSqliteVec(db: BetterSqliteDatabase): Promise<void> {
   const require = await nodeRequire();
-  const mod = require("sqlite-vec") as Partial<SqliteVecLoader> | { default?: Partial<SqliteVecLoader> };
-  const loader = "load" in mod ? mod : mod.default;
+  const mod = require("sqlite-vec") as Partial<SqliteVecLoader> & { default?: Partial<SqliteVecLoader> };
+  const loader = mod.load !== undefined ? mod : mod.default;
   if (loader?.load === undefined) {
     throw new Error("sqlite-vec did not expose a load(db) function");
   }
@@ -223,8 +223,8 @@ class WasmDatabaseAdapter implements Database {
           bind: normalizeWasmParams(params),
           rowMode: "object",
           returnValue: "resultRows",
-        }) as T[];
-        return rows[0];
+        }) as SqlRow[];
+        return rows[0] as T | undefined;
       },
       all: async <T extends SqlRow = SqlRow>(params?: SqlParams) =>
         this.db.exec({

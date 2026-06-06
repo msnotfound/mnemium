@@ -1,3 +1,4 @@
+import { defineContentScript } from "wxt/utils/define-content-script";
 import { networkCaptureConfigs } from "@/adapters/registry";
 import { installHistoryRouteCapture, installNetworkCapture } from "@/adapters/strategies/network";
 

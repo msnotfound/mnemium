@@ -142,7 +142,7 @@ function patchFetch(originalFetch: FetchLike, configs: NetworkCaptureConfig[]): 
 function patchXhrOpen(originalOpen: XhrOpen): XhrOpen {
   return function open(this: XMLHttpRequest, method: string, url: string | URL, ...rest: unknown[]): void {
     xhrMeta.set(this, { method, url: String(url), requestText: "" });
-    originalOpen.apply(this, [method, url, ...(rest as [boolean?, string?, string?])]);
+    (originalOpen as (...args: unknown[]) => void).apply(this, [method, url, ...rest]);
   };
 }
 
@@ -167,7 +167,7 @@ function patchXhrSend(originalSend: XhrSend, configs: NetworkCaptureConfig[]): X
       });
     }
 
-    originalSend.call(this, body);
+    originalSend.call(this, body as XMLHttpRequestBodyInit | null | undefined);
   };
 }
 

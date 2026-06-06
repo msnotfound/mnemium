@@ -1,3 +1,4 @@
+import { defineContentScript } from "wxt/utils/define-content-script";
 import { mountMnemiumContent } from "@/content/mount";
 
 export default defineContentScript({

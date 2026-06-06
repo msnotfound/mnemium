@@ -179,7 +179,7 @@ async function callApiProvider(
       ...authorizationHeader,
       ...anthropicHeader,
       ...(provider === "openrouter" ? { "HTTP-Referer": "chrome-extension://mnemium" } : {}),
-    },
+    } as Record<string, string>,
     body: JSON.stringify(
       provider === "anthropic"
         ? { model, max_tokens: 900, system: messages[0]?.content, messages: messages.slice(1) }

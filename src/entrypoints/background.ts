@@ -1,3 +1,4 @@
+import { defineBackground } from "wxt/utils/define-background";
 import { routeRpc } from "@/runtime/orchestrator";
 import { isRpcEnvelope } from "@/runtime/rpc";
 

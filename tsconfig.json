@@ -21,6 +21,6 @@
       "@core/*": ["src/core/*"]
     }
   },
-  "include": ["src", "wxt.config.ts", "test"],
+  "include": ["src", "wxt.config.ts", "test", ".wxt/wxt.d.ts"],
   "exclude": ["node_modules", ".output", ".wxt"]
 }
