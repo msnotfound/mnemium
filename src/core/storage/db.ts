@@ -126,10 +126,7 @@ async function tryLoadSqliteVec(db: BetterSqliteDatabase): Promise<void> {
 }
 
 async function tryLoadWasmSqliteVec(db: WasmDatabase): Promise<void> {
-  const dynamicImport = new Function("specifier", "return import(specifier)") as (
-    specifier: string,
-  ) => Promise<unknown>;
-  const mod = (await dynamicImport("sqlite-vec")) as Partial<{
+  const mod = (await import("sqlite-vec")) as unknown as Partial<{
     load(db: WasmDatabase): void | Promise<void>;
     default: Partial<{ load(db: WasmDatabase): void | Promise<void> }>;
   }>;
@@ -146,17 +143,11 @@ async function nodeRequire(): Promise<(specifier: string) => unknown> {
 }
 
 async function nodeImport<T>(specifier: string): Promise<T> {
-  const dynamicImport = new Function("specifier", "return import(specifier)") as (
-    specifier: string,
-  ) => Promise<unknown>;
-  return (await dynamicImport(specifier)) as T;
+  return (await import(/* @vite-ignore */ specifier)) as T;
 }
 
 async function importWasmSqlite(): Promise<WasmFactoryResult> {
-  const dynamicImport = new Function("specifier", "return import(specifier)") as (
-    specifier: string,
-  ) => Promise<unknown>;
-  const mod = await dynamicImport("@sqlite.org/sqlite-wasm");
+  const mod = await import("@sqlite.org/sqlite-wasm");
   const candidate = mod as { default?: unknown; sqlite3InitModule?: unknown };
   const initializer = candidate.default ?? candidate.sqlite3InitModule;
   if (typeof initializer !== "function") {

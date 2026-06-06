@@ -39,8 +39,8 @@ export class SqliteVectorIndex implements VectorIndexContract {
         if (mapped === undefined) {
           throw new Error(`Unable to map vector row for memory ${row.id}`);
         }
-        await deleteVector.run([mapped.rowid]);
-        await insertVector.run([mapped.rowid, serializeVector(row.vec)]);
+        await deleteVector.run([BigInt(mapped.rowid)]);
+        await insertVector.run([BigInt(mapped.rowid), serializeVector(row.vec)]);
       }
     });
   }
