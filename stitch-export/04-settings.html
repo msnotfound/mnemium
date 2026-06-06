@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Lumina - System Settings</title>
+<!-- Fonts -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind Config -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {},
+            borderRadius: {
+                    "DEFAULT": "0.5rem",
+                    "lg": "1rem",
+                    "xl": "1.5rem",
+                    "full": "9999px"
+            },
+            fontFamily: {
+                    "headline": ["Geist", "sans-serif"],
+                    "display": ["Geist", "sans-serif"],
+                    "body": ["Inter", "sans-serif"],
+                    "label": ["Inter", "sans-serif"]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body { background-color: #09090b; color: #fafafa; }
+    </style>
+</head>
+<body class="font-body antialiased flex h-screen overflow-hidden selection:bg-[#5B5BD6]/30">
+<!-- SideNavBar (Shared Component) -->
+<nav class="bg-zinc-950 flex flex-col py-8 px-4 gap-2 h-screen w-64 border-r border-white/5 no shadows ease-out duration-150 relative z-10 shrink-0">
+<!-- Header -->
+<div class="mb-10 px-2 flex items-center gap-3">
+<div class="w-8 h-8 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center">
+<span class="material-symbols-outlined text-[#5B5BD6] text-xl" data-icon="lens" data-weight="fill" style="font-variation-settings: 'FILL' 1;">lens</span>
+</div>
+<div>
+<h1 class="font-headline font-bold text-[#5B5BD6] text-lg leading-tight">Lumina</h1>
+<p class="text-xs text-zinc-500 font-medium">Private Intelligence</p>
+</div>
+</div>
+<!-- Navigation Tabs -->
+<div class="flex flex-col gap-1">
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-[#8A8A8F] hover:text-white hover:bg-white/5 transition-all duration-200 group" href="#">
+<span class="material-symbols-outlined text-lg opacity-70 group-hover:opacity-100 transition-opacity">grain</span>
+<span>Memory</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-[#8A8A8F] hover:text-white hover:bg-white/5 transition-all duration-200 group" href="#">
+<span class="material-symbols-outlined text-lg opacity-70 group-hover:opacity-100 transition-opacity">hub</span>
+<span>Connections</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-[#8A8A8F] hover:text-white hover:bg-white/5 transition-all duration-200 group" href="#">
+<span class="material-symbols-outlined text-lg opacity-70 group-hover:opacity-100 transition-opacity">shield</span>
+<span>Privacy</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 text-[#5B5BD6] bg-[#5B5BD6]/5 rounded-lg text-sm font-medium transition-all duration-200" href="#">
+<span class="material-symbols-outlined text-lg" data-weight="fill" style="font-variation-settings: 'FILL' 1;">settings</span>
+<span>System</span>
+</a>
+</div>
+</nav>
+<!-- Main Content Canvas -->
+<main class="flex-1 overflow-y-auto relative bg-[#09090b]">
+<!-- Subtle background glow -->
+<div class="fixed top-0 left-1/2 -translate-x-1/2 w-[800px] h-[300px] bg-[#5B5BD6]/5 blur-[120px] rounded-full pointer-events-none"></div>
+<div class="max-w-3xl mx-auto px-10 py-16 flex flex-col gap-12 relative z-10 pb-32">
+<header>
+<h2 class="font-headline text-3xl font-semibold tracking-tight mb-2">System Configuration</h2>
+<p class="text-zinc-400 text-sm">Manage underlying models, injection rules, and local data persistence.</p>
+</header>
+<div class="flex flex-col gap-6">
+<!-- Group 1: Memory Model -->
+<section class="bg-zinc-900/40 border border-zinc-800/60 rounded-xl p-6 backdrop-blur-sm relative overflow-hidden">
+<div class="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/5 to-transparent"></div>
+<div class="mb-5 flex items-center justify-between">
+<div>
+<h3 class="font-headline font-medium text-zinc-100 text-base mb-1">Compute Engine</h3>
+<p class="text-xs text-zinc-500">Select the primary language model powering intelligence.</p>
+</div>
+<span class="text-[10px] font-medium tracking-wider text-[#5B5BD6] uppercase bg-[#5B5BD6]/10 px-2 py-0.5 rounded-full border border-[#5B5BD6]/20">Active</span>
+</div>
+<div class="bg-zinc-950/50 p-1 rounded-lg border border-zinc-800/40 flex text-sm font-medium relative mb-3">
+<button class="flex-1 py-2 text-center text-white bg-zinc-800/80 shadow-sm rounded-md border border-zinc-700/50 relative z-10 transition-colors">
+<div class="flex items-center justify-center gap-2">
+<span class="w-1.5 h-1.5 rounded-full bg-[#5B5BD6] shadow-[0_0_8px_#5B5BD6]"></span>
+                                Built-in <span class="text-zinc-400 font-normal">(on-device)</span>
+</div>
+</button>
+<button class="flex-1 py-2 text-center text-zinc-400 hover:text-zinc-200 transition-colors">
+                            Local server <span class="text-zinc-600 font-normal">(Ollama)</span>
+</button>
+<button class="flex-1 py-2 text-center text-zinc-400 hover:text-zinc-200 transition-colors">
+                            API key
+                        </button>
+</div>
+<div class="flex items-start gap-2 text-xs text-zinc-500 pl-1">
+<span class="material-symbols-outlined text-[14px]">info</span>
+<p>Runs fully offline. ~980 MB, downloaded once.</p>
+</div>
+</section>
+<!-- Group 2: Embedding Model -->
+<section class="bg-zinc-900/40 border border-zinc-800/60 rounded-xl p-6 backdrop-blur-sm relative">
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+<div>
+<h3 class="font-headline font-medium text-zinc-100 text-base mb-1">Embedding Space</h3>
+<p class="text-xs text-zinc-500 max-w-sm">Determines how memories are vectorized and retrieved.</p>
+</div>
+<div class="relative min-w-[200px]">
+<select class="w-full appearance-none bg-zinc-950 border border-zinc-800 text-sm text-zinc-200 rounded-lg pl-4 pr-10 py-2.5 focus:outline-none focus:ring-1 focus:ring-[#5B5BD6] focus:border-[#5B5BD6] cursor-pointer transition-colors shadow-sm">
+<option selected="" value="bge-small-en">bge-small-en</option>
+<option value="nomic-embed-text">nomic-embed-text</option>
+<option value="all-MiniLM-L6-v2">all-MiniLM-L6-v2</option>
+</select>
+<span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none">expand_more</span>
+</div>
+</div>
+<div class="mt-4 pt-4 border-t border-zinc-800/50 flex items-start gap-2 text-xs text-amber-500/80">
+<span class="material-symbols-outlined text-[14px]">warning</span>
+<p>Changing this re-indexes your entire memory database in the background.</p>
+</div>
+</section>
+<!-- Group 3: Auto-injection -->
+<section class="bg-zinc-900/40 border border-zinc-800/60 rounded-xl p-6 backdrop-blur-sm relative">
+<div class="flex items-center justify-between mb-6">
+<div>
+<h3 class="font-headline font-medium text-zinc-100 text-base mb-1 flex items-center gap-2">
+                                Context Auto-injection
+                            </h3>
+<p class="text-xs text-zinc-500">Surface relevant memory automatically as you type in host apps.</p>
+</div>
+<!-- Toggle OFF -->
+<button aria-checked="false" class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-zinc-800 transition-colors duration-200 ease-in-out focus:outline-none" role="switch">
+<span class="translate-x-0 pointer-events-none inline-block h-5 w-5 transform rounded-full bg-zinc-400 shadow ring-0 transition duration-200 ease-in-out"></span>
+</button>
+</div>
+<div class="opacity-40 pointer-events-none">
+<div class="flex items-center justify-between text-xs mb-3">
+<span class="text-zinc-300 font-medium">Injection Sensitivity</span>
+<span class="text-zinc-500">0.75</span>
+</div>
+<input class="w-full h-1 bg-zinc-800 rounded-lg appearance-none cursor-not-allowed [&amp;::-webkit-slider-thumb]:appearance-none [&amp;::-webkit-slider-thumb]:w-3 [&amp;::-webkit-slider-thumb]:h-3 [&amp;::-webkit-slider-thumb]:bg-zinc-500 [&amp;::-webkit-slider-thumb]:rounded-full" disabled="" max="1" min="0" step="0.05" type="range" value="0.75"/>
+<div class="flex justify-between text-[10px] text-zinc-600 mt-2">
+<span>Precise (Fewer)</span>
+<span>Broad (More)</span>
+</div>
+</div>
+</section>
+<!-- Group 4: Sites -->
+<section class="bg-zinc-900/40 border border-zinc-800/60 rounded-xl pt-6 pb-2 backdrop-blur-sm relative">
+<div class="px-6 mb-4">
+<h3 class="font-headline font-medium text-zinc-100 text-base mb-1">Active Integrations</h3>
+<p class="text-xs text-zinc-500">Web applications where Lumina is permitted to read and inject context.</p>
+</div>
+<div class="flex flex-col">
+<!-- Site Item -->
+<div class="flex items-center justify-between py-3 px-6 hover:bg-zinc-800/20 transition-colors border-t border-zinc-800/40 group">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-md bg-zinc-800 border border-zinc-700/50 flex items-center justify-center text-zinc-300 group-hover:text-white transition-colors">
+<span class="material-symbols-outlined text-[18px]">chat</span>
+</div>
+<span class="text-sm font-medium text-zinc-200">ChatGPT</span>
+</div>
+<button aria-checked="true" class="relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-[#5B5BD6] transition-colors duration-200 ease-in-out focus:outline-none" role="switch">
+<span class="translate-x-4 pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"></span>
+</button>
+</div>
+<!-- Site Item -->
+<div class="flex items-center justify-between py-3 px-6 hover:bg-zinc-800/20 transition-colors border-t border-zinc-800/40 group">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-md bg-zinc-800 border border-zinc-700/50 flex items-center justify-center text-zinc-300 group-hover:text-white transition-colors">
+<span class="material-symbols-outlined text-[18px]">smart_toy</span>
+</div>
+<span class="text-sm font-medium text-zinc-200">Claude</span>
+</div>
+<button aria-checked="true" class="relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-[#5B5BD6] transition-colors duration-200 ease-in-out focus:outline-none" role="switch">
+<span class="translate-x-4 pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"></span>
+</button>
+</div>
+<!-- Site Item -->
+<div class="flex items-center justify-between py-3 px-6 hover:bg-zinc-800/20 transition-colors border-t border-zinc-800/40 group">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-md bg-zinc-800 border border-zinc-700/50 flex items-center justify-center text-zinc-300 group-hover:text-white transition-colors">
+<span class="material-symbols-outlined text-[18px]">magic_button</span>
+</div>
+<span class="text-sm font-medium text-zinc-200">Gemini</span>
+</div>
+<button aria-checked="true" class="relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-[#5B5BD6] transition-colors duration-200 ease-in-out focus:outline-none" role="switch">
+<span class="translate-x-4 pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"></span>
+</button>
+</div>
+<!-- Site Item -->
+<div class="flex items-center justify-between py-3 px-6 hover:bg-zinc-800/20 transition-colors border-t border-zinc-800/40 group">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-md bg-zinc-800 border border-zinc-700/50 flex items-center justify-center text-zinc-300 group-hover:text-white transition-colors">
+<span class="material-symbols-outlined text-[18px]">travel_explore</span>
+</div>
+<span class="text-sm font-medium text-zinc-200">Grok</span>
+</div>
+<button aria-checked="false" class="relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-zinc-800 transition-colors duration-200 ease-in-out focus:outline-none" role="switch">
+<span class="translate-x-0 pointer-events-none inline-block h-4 w-4 transform rounded-full bg-zinc-400 shadow ring-0 transition duration-200 ease-in-out"></span>
+</button>
+</div>
+<!-- Site Item -->
+<div class="flex items-center justify-between py-3 px-6 hover:bg-zinc-800/20 transition-colors border-t border-zinc-800/40 group">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-md bg-zinc-800 border border-zinc-700/50 flex items-center justify-center text-zinc-300 group-hover:text-white transition-colors">
+<span class="material-symbols-outlined text-[18px]">code_blocks</span>
+</div>
+<span class="text-sm font-medium text-zinc-200">DeepSeek</span>
+</div>
+<button aria-checked="true" class="relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-[#5B5BD6] transition-colors duration-200 ease-in-out focus:outline-none" role="switch">
+<span class="translate-x-4 pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"></span>
+</button>
+</div>
+</div>
+</section>
+<!-- Group 5: Data -->
+<section class="bg-zinc-900/40 border border-zinc-800/60 rounded-xl p-6 backdrop-blur-sm relative">
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+<div>
+<h3 class="font-headline font-medium text-zinc-100 text-base mb-1">Data Management</h3>
+<p class="text-xs text-zinc-500">Your memory resides strictly locally. Manage the raw SQLite vault.</p>
+</div>
+<div class="flex items-center gap-4">
+<button class="px-4 py-2 border border-zinc-700/80 bg-zinc-800/30 hover:bg-zinc-800 text-sm font-medium rounded-lg text-zinc-200 transition-all duration-200 flex items-center gap-2 shadow-sm">
+<span class="material-symbols-outlined text-[16px]">download</span>
+                                Export backup (.sqlite)
+                            </button>
+</div>
+</div>
+<div class="mt-6 pt-5 border-t border-zinc-800/50 flex justify-end">
+<button class="text-xs text-red-500/70 hover:text-red-400 font-medium transition-colors hover:underline underline-offset-4 decoration-red-500/30">
+                            Clear all memory
+                        </button>
+</div>
+</section>
+</div>
+</div>
+</main>
+</body></html>

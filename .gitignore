@@ -1,0 +1,21 @@
+# deps / build
+node_modules/
+.output/
+.wxt/
+dist/
+*.tsbuildinfo
+
+# local data / models
+*.sqlite
+models/*.bin
+models/*.onnx
+*.wasm.cache
+
+# research artifacts (kept locally, not in repo)
+research/*.txt
+
+# os / editor
+.DS_Store
+*.log
+.env
+.env.*

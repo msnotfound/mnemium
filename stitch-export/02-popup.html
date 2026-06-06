@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Mnemium Extension Popup</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;600;800&amp;family=Inter:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {},
+            "borderRadius": {
+                    "DEFAULT": "0.5rem",
+                    "lg": "1rem",
+                    "xl": "1.5rem",
+                    "full": "9999px"
+            },
+            "spacing": {},
+            "fontFamily": {
+                    "headline": [
+                            "Geist"
+                    ],
+                    "display": [
+                            "Geist"
+                    ],
+                    "body": [
+                            "Inter"
+                    ],
+                    "label": [
+                            "Inter"
+                    ]
+            },
+            "fontSize": {}
+          },
+        },
+      }
+    </script>
+<style>
+        /* Custom scrollbar for webkit */
+        ::-webkit-scrollbar {
+            width: 4px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #262626; /* neutral-800 */
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #404040; /* neutral-700 */
+        }
+        
+        .memory-card-hover:hover .delete-action {
+            opacity: 1;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-neutral-950 text-neutral-200 font-body antialiased w-[360px] h-[600px] flex flex-col overflow-hidden m-0 border border-neutral-800 selection:bg-[#5B5BD6]/30">
+<!-- TopAppBar -->
+<header class="fixed top-0 w-full bg-white/80 dark:bg-neutral-900/80 backdrop-blur-md border-b border-neutral-200 dark:border-neutral-800 shadow-sm z-50 flex items-center justify-between px-4 h-12 w-full max-w-[400px]">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[#5B5BD6] text-xl" style="font-variation-settings: 'FILL' 1;">memory</span>
+<span class="font-display font-semibold text-neutral-900 dark:text-neutral-100 tracking-tighter text-sm">Mnemium</span>
+</div>
+<div class="flex items-center gap-1.5 opacity-80">
+<span class="relative flex h-1.5 w-1.5">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+<span class="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+</span>
+<span class="font-mono text-[10px] text-neutral-400 dark:text-neutral-500 tracking-tight">Local · 1,240 memories</span>
+<span class="material-symbols-outlined text-neutral-400 dark:text-neutral-500 text-[16px] ml-1">sensors</span>
+</div>
+</header>
+<!-- Main Content Area (Scrollable) -->
+<main class="flex-1 mt-12 mb-10 overflow-y-auto pt-3 px-4 pb-4 flex flex-col gap-4">
+<!-- Search Section -->
+<div class="relative w-full group">
+<div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+<span class="material-symbols-outlined text-neutral-500 text-[18px]">search</span>
+</div>
+<input class="block w-full pl-9 pr-3 py-2 bg-neutral-900 border border-neutral-800 rounded-lg text-sm text-neutral-200 placeholder-neutral-600 focus:outline-none focus:border-[#5B5BD6]/50 focus:ring-1 focus:ring-[#5B5BD6]/30 transition-all duration-200" placeholder="Search your memory..." type="text"/>
+</div>
+<!-- Content Section -->
+<div class="flex flex-col gap-1">
+<h2 class="font-label text-[10px] text-neutral-500 uppercase tracking-widest pl-1 mb-2">Recent</h2>
+<div class="flex flex-col border border-neutral-800 rounded-lg overflow-hidden bg-neutral-900/30">
+<!-- Memory 1 -->
+<div class="p-3 border-b border-neutral-800/50 hover:bg-neutral-900/80 transition-colors duration-150 memory-card-hover group cursor-default">
+<div class="flex justify-between items-start gap-2 mb-1.5">
+<p class="text-[13px] leading-tight text-neutral-300">Prefers TypeScript with strict mode</p>
+</div>
+<div class="flex items-center gap-2">
+<span class="px-1.5 py-0.5 rounded-[4px] bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-[9px] font-medium tracking-wide">PREFERENCE</span>
+<span class="font-mono text-[10px] text-[#8A8A8F]">Claude · 3d</span>
+</div>
+</div>
+<!-- Memory 2 -->
+<div class="p-3 border-b border-neutral-800/50 hover:bg-neutral-900/80 transition-colors duration-150 memory-card-hover group cursor-default relative">
+<div class="flex justify-between items-start gap-2 mb-1.5 pr-6">
+<p class="text-[13px] leading-tight text-neutral-300">Working on a local-first Chrome extension</p>
+</div>
+<div class="flex items-center gap-2">
+<span class="px-1.5 py-0.5 rounded-[4px] bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[9px] font-medium tracking-wide">TASK</span>
+<span class="font-mono text-[10px] text-[#8A8A8F]">ChatGPT · 1w</span>
+</div>
+<button class="delete-action opacity-0 absolute right-3 top-3 text-neutral-500 hover:text-red-400 transition-all duration-200">
+<span class="material-symbols-outlined text-[16px]">delete</span>
+</button>
+</div>
+<!-- Memory 3 -->
+<div class="p-3 border-b border-neutral-800/50 hover:bg-neutral-900/80 transition-colors duration-150 memory-card-hover group cursor-default">
+<div class="flex justify-between items-start gap-2 mb-1.5">
+<p class="text-[13px] leading-tight text-neutral-300">Has an exam on Friday</p>
+</div>
+<div class="flex items-center gap-2">
+<span class="px-1.5 py-0.5 rounded-[4px] bg-rose-500/10 text-rose-400 border border-rose-500/20 text-[9px] font-medium tracking-wide">EPISODE</span>
+<span class="font-mono text-[10px] text-[#8A8A8F]">Claude · 1d</span>
+</div>
+</div>
+<!-- Memory 4 -->
+<div class="p-3 border-b border-neutral-800/50 hover:bg-neutral-900/80 transition-colors duration-150 memory-card-hover group cursor-default">
+<div class="flex justify-between items-start gap-2 mb-1.5">
+<p class="text-[13px] leading-tight text-neutral-300">Lives in San Francisco</p>
+</div>
+<div class="flex items-center gap-2">
+<span class="px-1.5 py-0.5 rounded-[4px] bg-sky-500/10 text-sky-400 border border-sky-500/20 text-[9px] font-medium tracking-wide">FACT</span>
+<span class="font-mono text-[10px] text-[#8A8A8F]">Claude · 5d</span>
+</div>
+</div>
+<!-- Memory 5 -->
+<div class="p-3 hover:bg-neutral-900/80 transition-colors duration-150 memory-card-hover group cursor-default">
+<div class="flex justify-between items-start gap-2 mb-1.5">
+<p class="text-[13px] leading-tight text-neutral-300">Likes concise, direct answers</p>
+</div>
+<div class="flex items-center gap-2">
+<span class="px-1.5 py-0.5 rounded-[4px] bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-[9px] font-medium tracking-wide">PREFERENCE</span>
+<span class="font-mono text-[10px] text-[#8A8A8F]">ChatGPT · 2w</span>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Bottom Footer (Pinned) -->
+<footer class="fixed bottom-0 w-full h-10 bg-neutral-950 border-t border-neutral-800 flex items-center justify-between px-4 z-50">
+<div class="font-mono text-[9px] text-neutral-500">
+            Local storage: 12MB
+        </div>
+<button class="text-[10px] font-medium text-neutral-400 hover:text-neutral-200 transition-colors duration-200 px-2 py-1 rounded hover:bg-neutral-900">
+            Export backup
+        </button>
+<button class="text-neutral-500 hover:text-neutral-300 transition-colors duration-200 flex items-center justify-center">
+<span class="material-symbols-outlined text-[16px]">settings</span>
+</button>
+</footer>
+</body></html>

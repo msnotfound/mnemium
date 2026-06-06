@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Memex AI - Command Palette</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        surface: "#09090b", // Deep near-black for dark mode
+                        'surface-overlay': "rgba(24, 24, 27, 0.7)",
+                        'surface-overlay-solid': "#18181b",
+                        'on-surface': "#f4f4f5",
+                        'on-surface-muted': "#8A8A8F",
+                        primary: "#5B5BD6",
+                        'primary-transparent': "rgba(91, 91, 214, 0.1)",
+                        divider: "rgba(138, 138, 143, 0.1)",
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.5rem",
+                        "lg": "1rem",
+                        "xl": "1.5rem",
+                        "full": "9999px"
+                    },
+                    fontFamily: {
+                        "headline": ["Geist", "sans-serif"],
+                        "display": ["Geist", "sans-serif"],
+                        "body": ["Inter", "sans-serif"],
+                        "label": ["Inter", "sans-serif"]
+                    },
+                    boxShadow: {
+                        'glass': '0 8px 32px 0 rgba(0, 0, 0, 0.37)',
+                        'subtle': '0 4px 12px 0 rgba(0, 0, 0, 0.15)',
+                    }
+                },
+            },
+        }
+    </script>
+<style>body {
+    font-family: "Inter", sans-serif;
+    background-color: #09090b;
+    color: #f4f4f5;
+    overflow: hidden;
+    /* Prevent scrolling when modal is open */
+    }
+h1, h2, h3, h4, h5, h6, .font-headline, .font-display {
+    font-family: "Geist", sans-serif
+    }
+.glass-panel {
+    background: rgba(24, 24, 27, 0.75);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid rgba(138, 138, 143, 0.15);
+    border-radius: 12px;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.05)
+    }
+/* Mock background to simulate overlay */
+.mock-bg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-image: url(https://lh3.googleusercontent.com/aida-public/AB6AXuBy31ZhhEUFeTOgMJ34vupUJqNHvtbVCn2rNeVdpN_JRGBZWK2YVPc8LvMz3TmCZB5Exvu4_rtozl5zq6OoSMqaHy25bkU1qIb1crDmAR9E6Aw1bE7St0tVlQo6joBL4SY_R7re6DnvQ_9UKeMcPL6iWyb4dqMb8WK7hZcnMNKIIWZjhkb3ZwRMFD-YAqtYrVlnEUEGXXHA9n0DwH6TtOYWNQLC7q0wS4d2P70DajSUMKrPYFoKugLYTHt9oGvpu0zD5amurfvdDTa1);
+    background-size: cover;
+    background-position: center;
+    filter: blur(8px) brightness(0.3);
+    z-index: -1;
+    /* Using placeholder prompt instead of generating one, but following instructions */
+    data-alt: "A blurred, dark abstract tech background suggesting a complex interface. Soft, muted lights create a premium, calm atmosphere suitable for an AI workspace. The lighting is extremely low-key, relying on deep blacks and subtle hints of indigo and slate gray. The mood is focused and restrained, embodying a quiet luxury aesthetic."
+    }
+.kbd-key {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background-color: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-bottom-width: 2px;
+    border-radius: 4px;
+    padding: 0 4px;
+    min-width: 20px;
+    height: 20px;
+    font-family: "Inter", monospace;
+    font-size: 10px;
+    color: #8A8A8F;
+    line-height: 1
+    }
+/* Focus invisible but present for keyboard navigation */
+.result-item:focus {
+    outline: none;
+    background-color: rgba(91, 91, 214, 0.15)
+    }
+.tag {
+    font-family: "Inter", sans-serif;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: 600
+    }
+.tag-preference {
+    background-color: rgba(91, 91, 214, 0.15);
+    color: #5B5BD6;
+    border: 1px solid rgba(91, 91, 214, 0.3)
+    }
+.tag-task {
+    background-color: rgba(46, 160, 67, 0.1);
+    color: #4ade80;
+    border: 1px solid rgba(46, 160, 67, 0.2)
+    }
+.tag-context {
+    background-color: rgba(210, 168, 255, 0.1);
+    color: #c084fc;
+    border: 1px solid rgba(210, 168, 255, 0.2)
+    }
+.search-input::placeholder {
+    color: #8A8A8F;
+    opacity: 0.5
+    }</style>
+</head>
+<body class="antialiased flex items-center justify-center min-h-screen">
+<!-- Blurred Host Background -->
+<div class="mock-bg"></div>
+<!-- Overlay Wrapper -->
+<div class="fixed inset-0 z-40 flex items-start justify-center pt-[153px] px-4 sm:px-0">
+<!-- Command Palette Modal -->
+<div aria-label="Command Palette" aria-modal="true" class="glass-panel w-full max-w-2xl flex flex-col transform transition-all scale-100 opacity-100" role="dialog">
+<!-- Header / Search Input -->
+<div class="flex items-center px-4 py-3 border-b border-divider gap-3">
+<span class="material-symbols-outlined text-on-surface-muted text-xl" data-icon="auto_awesome" data-weight="fill" style="font-variation-settings: 'FILL' 1;">auto_awesome</span>
+<input autofocus="" class="search-input w-full bg-transparent border-none outline-none text-on-surface font-headline text-lg placeholder:text-on-surface-muted/50 focus:ring-0 p-0 m-0" placeholder="Search memories, contexts, or tasks..." type="text" value="typescript"/>
+<div class="flex items-center gap-1 opacity-50 shrink-0">
+<span class="kbd-key">⌘</span>
+<span class="kbd-key">K</span>
+</div>
+</div>
+<!-- Results List -->
+<div class="max-h-[614px] overflow-y-auto py-2 flex flex-col gap-1 px-2" role="listbox">
+<!-- Result 1 (Active/Selected) -->
+<button aria-selected="true" class="result-item w-full flex items-center justify-between p-3 rounded-[8px] bg-primary-transparent text-left group cursor-pointer border border-primary/20 transition-colors" role="option" tabindex="0">
+<div class="flex items-center gap-4 truncate">
+<span class="material-symbols-outlined text-primary text-sm shrink-0" data-icon="memory">memory</span>
+<div class="flex flex-col gap-1 truncate">
+<span class="font-body text-sm text-on-surface truncate">Prefers TypeScript with strict mode</span>
+<div class="flex items-center gap-2">
+<span class="tag tag-preference">PREFERENCE</span>
+<span class="font-label text-[10px] text-on-surface-muted">Claude · 3d</span>
+</div>
+</div>
+</div>
+<!-- Action Indicator (Only visible on active) -->
+<div class="flex items-center gap-2 shrink-0">
+<span class="font-label text-xs text-primary font-medium tracking-tight">inject</span>
+<span class="kbd-key border-primary/30 text-primary">↵</span>
+</div>
+</button>
+<!-- Result 2 -->
+<button aria-selected="false" class="result-item w-full flex items-center justify-between p-3 rounded-[8px] hover:bg-surface-overlay-solid text-left group cursor-pointer border border-transparent transition-colors" role="option" tabindex="-1">
+<div class="flex items-center gap-4 truncate">
+<span class="material-symbols-outlined text-on-surface-muted text-sm shrink-0" data-icon="task_alt">task_alt</span>
+<div class="flex flex-col gap-1 truncate">
+<span class="font-body text-sm text-on-surface-muted group-hover:text-on-surface truncate transition-colors">Working on a local-first Chrome extension in TypeScript</span>
+<div class="flex items-center gap-2">
+<span class="tag tag-task">TASK</span>
+<span class="font-label text-[10px] text-on-surface-muted">ChatGPT · 1w</span>
+</div>
+</div>
+</div>
+<div class="hidden group-hover:flex items-center gap-2 shrink-0">
+<span class="font-label text-xs text-on-surface-muted font-medium tracking-tight">inject</span>
+<span class="kbd-key">↵</span>
+</div>
+</button>
+<!-- Result 3 -->
+<button aria-selected="false" class="result-item w-full flex items-center justify-between p-3 rounded-[8px] hover:bg-surface-overlay-solid text-left group cursor-pointer border border-transparent transition-colors" role="option" tabindex="-1">
+<div class="flex items-center gap-4 truncate">
+<span class="material-symbols-outlined text-on-surface-muted text-sm shrink-0" data-icon="article">article</span>
+<div class="flex flex-col gap-1 truncate">
+<span class="font-body text-sm text-on-surface-muted group-hover:text-on-surface truncate transition-colors">TypeScript project uses Manifest V3</span>
+<div class="flex items-center gap-2">
+<span class="tag tag-context">CONTEXT</span>
+<span class="font-label text-[10px] text-on-surface-muted">Claude · 4d</span>
+</div>
+</div>
+</div>
+<div class="hidden group-hover:flex items-center gap-2 shrink-0">
+<span class="font-label text-xs text-on-surface-muted font-medium tracking-tight">inject</span>
+<span class="kbd-key">↵</span>
+</div>
+</button>
+<!-- Result 4 -->
+<button aria-selected="false" class="result-item w-full flex items-center justify-between p-3 rounded-[8px] hover:bg-surface-overlay-solid text-left group cursor-pointer border border-transparent transition-colors" role="option" tabindex="-1">
+<div class="flex items-center gap-4 truncate">
+<span class="material-symbols-outlined text-on-surface-muted text-sm shrink-0" data-icon="memory">memory</span>
+<div class="flex flex-col gap-1 truncate">
+<span class="font-body text-sm text-on-surface-muted group-hover:text-on-surface truncate transition-colors">Likes concise, direct answers in TypeScript</span>
+<div class="flex items-center gap-2">
+<span class="tag tag-preference">PREFERENCE</span>
+<span class="font-label text-[10px] text-on-surface-muted">ChatGPT · 2w</span>
+</div>
+</div>
+</div>
+<div class="hidden group-hover:flex items-center gap-2 shrink-0">
+<span class="font-label text-xs text-on-surface-muted font-medium tracking-tight">inject</span>
+<span class="kbd-key">↵</span>
+</div>
+</button>
+</div>
+<!-- Footer Hints -->
+<div class="border-t border-divider px-4 py-2 bg-surface-overlay-solid/30 rounded-b-[12px] flex items-center justify-between">
+<div class="flex items-center gap-4 font-label text-[10px] text-on-surface-muted font-medium">
+<span class="flex items-center gap-1"><span class="kbd-key">↑</span><span class="kbd-key">↓</span> navigate</span>
+<span class="flex items-center gap-1"><span class="kbd-key">↵</span> inject</span>
+<span class="flex items-center gap-1"><span class="kbd-key text-[8px]">ESC</span> close</span>
+</div>
+<div class="font-display text-[10px] text-on-surface-muted/50 tracking-tighter font-semibold uppercase">
+                    Memex AI
+                </div>
+</div>
+</div>
+</div>
+<!-- Generated Header/Nav components from JSON logic (Hidden as per intent rules for command palette overlay) -->
+<!-- The prompt specifically asks for a command palette overlay. According to the Shell Visibility & Relevance Filter: -->
+<!-- "Automatic Suppression: You MUST exclude the navigation shell if the page intent is... Task-Focused: Any sub-page featuring a 'Close' or 'Back' action that implies a temporary departure from the main navigation flow." -->
+<!-- A Command Palette is the ultimate temporary departure / overlay. Thus, TopNavBar, SideNavBar, and generic Footer are suppressed. -->
+</body></html>

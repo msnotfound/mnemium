@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Lumina Privacy - Onboarding</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&amp;family=Inter:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#5B5BD6',
+                        muted: '#8A8A8F',
+                        surface: 'rgba(255, 255, 255, 0.05)',
+                        surfaceBorder: 'rgba(255, 255, 255, 0.1)'
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.5rem",
+                        "lg": "1rem",
+                        "xl": "1.5rem",
+                        "full": "9999px"
+                    },
+                    fontFamily: {
+                        "headline": ["Geist", "sans-serif"],
+                        "display": ["Geist", "sans-serif"],
+                        "body": ["Inter", "sans-serif"],
+                        "label": ["Inter", "sans-serif"]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body {
+            background-color: #000;
+            background-image: radial-gradient(circle at 50% -20%, rgba(91, 91, 214, 0.15) 0%, transparent 50%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            padding: 24px;
+        }
+        
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+        }
+        
+        .glass-card {
+            background: rgba(20, 20, 20, 0.6);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 24px 64px -12px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        }
+    </style>
+</head>
+<body class="antialiased">
+<!-- Top Navigation injected via JSON instructions (suppressed since this is transactional/onboarding) -->
+<!-- Navigation Shell suppressed due to onboarding intent -->
+<main class="w-full max-w-xl mx-auto flex flex-col items-center animate-[fadeIn_0.6s_ease-out]">
+<!-- Brand / Logo (Minimal) -->
+<div class="mb-12 flex items-center gap-2 opacity-80">
+<span class="material-symbols-outlined text-primary text-xl" style="font-variation-settings: 'FILL' 1;">shield</span>
+<span class="font-headline font-semibold text-white tracking-tight">Lumina</span>
+</div>
+<!-- Main Content Card -->
+<div class="glass-card w-full rounded-[2rem] p-8 md:p-12 relative overflow-hidden">
+<!-- Step Indicator -->
+<div class="flex justify-center gap-2 mb-10">
+<div class="w-1.5 h-1.5 rounded-full bg-white/20 transition-all duration-300"></div>
+<div class="w-6 h-1.5 rounded-full bg-primary transition-all duration-300"></div>
+<div class="w-1.5 h-1.5 rounded-full bg-white/20 transition-all duration-300"></div>
+</div>
+<!-- Header Section -->
+<div class="text-center mb-8">
+<div class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-surface border border-surfaceBorder mb-6">
+<span class="material-symbols-outlined text-primary text-2xl">lock</span>
+</div>
+<h1 class="font-display text-2xl md:text-3xl font-medium tracking-tight text-white mb-4 leading-tight">
+                    Your AI chats, with memory —<br/>100% on your device.
+                </h1>
+<p class="font-body text-muted text-[15px] leading-relaxed max-w-sm mx-auto">
+                    Nothing is ever sent to a server. We read your conversations on these sites only to build your private memory, stored locally on this device.
+                </p>
+</div>
+<!-- Provider Grid -->
+<div class="flex flex-wrap justify-center gap-3 mb-12">
+<!-- Provider Tile -->
+<div class="flex items-center gap-2 px-3 py-2 rounded-xl bg-surface border border-surfaceBorder hover:bg-white/10 transition-colors duration-200">
+<span class="material-symbols-outlined text-primary text-sm" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="font-label text-sm text-gray-300">ChatGPT</span>
+</div>
+<!-- Provider Tile -->
+<div class="flex items-center gap-2 px-3 py-2 rounded-xl bg-surface border border-surfaceBorder hover:bg-white/10 transition-colors duration-200">
+<span class="material-symbols-outlined text-primary text-sm" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="font-label text-sm text-gray-300">Claude</span>
+</div>
+<!-- Provider Tile -->
+<div class="flex items-center gap-2 px-3 py-2 rounded-xl bg-surface border border-surfaceBorder hover:bg-white/10 transition-colors duration-200">
+<span class="material-symbols-outlined text-primary text-sm" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="font-label text-sm text-gray-300">Gemini</span>
+</div>
+<!-- Provider Tile -->
+<div class="flex items-center gap-2 px-3 py-2 rounded-xl bg-surface border border-surfaceBorder hover:bg-white/10 transition-colors duration-200">
+<span class="material-symbols-outlined text-primary text-sm" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="font-label text-sm text-gray-300">Grok</span>
+</div>
+<!-- Provider Tile -->
+<div class="flex items-center gap-2 px-3 py-2 rounded-xl bg-surface border border-surfaceBorder hover:bg-white/10 transition-colors duration-200">
+<span class="material-symbols-outlined text-primary text-sm" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="font-label text-sm text-gray-300">DeepSeek</span>
+</div>
+</div>
+<!-- Actions -->
+<div class="flex flex-col items-center gap-5">
+<button class="w-full max-w-[280px] bg-primary hover:bg-[#6c6ce0] text-white font-medium py-3.5 px-6 rounded-xl transition-all duration-200 hover:shadow-[0_0_20px_rgba(91,91,214,0.3)] active:scale-[0.98]">
+                    Grant access &amp; continue
+                </button>
+<button class="text-sm text-muted hover:text-white transition-colors duration-200 underline-offset-4 hover:underline">
+                    See exactly what gets stored
+                </button>
+</div>
+<!-- Subtle atmospheric glow inside card -->
+<div class="absolute -bottom-24 -right-24 w-64 h-64 bg-primary/5 rounded-full blur-[64px] pointer-events-none"></div>
+</div>
+</main>
+<script>
+        // Simple subtle entrance animation handled by Tailwind config extension
+        tailwind.config.theme.extend.keyframes = {
+            ...tailwind.config.theme.extend.keyframes,
+            fadeIn: {
+                '0%': { opacity: '0', transform: 'translateY(10px)' },
+                '100%': { opacity: '1', transform: 'translateY(0)' },
+            }
+        };
+    </script>
+</body></html>

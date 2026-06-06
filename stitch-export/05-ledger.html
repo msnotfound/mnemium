@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Mnemium Ledger</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Geist:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {},
+                    borderRadius: {
+                        "DEFAULT": "0.5rem",
+                        "lg": "1rem",
+                        "xl": "0.75rem", // 12px for cards
+                        "full": "9999px"
+                    },
+                    fontFamily: {
+                        "headline": ["Geist", "sans-serif"],
+                        "display": ["Geist", "sans-serif"],
+                        "body": ["Inter", "sans-serif"],
+                        "label": ["Inter", "sans-serif"],
+                        "mono": ["JetBrains Mono", "monospace"]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background-color: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-[#0f0f0f] text-white font-body overflow-hidden h-screen flex justify-center items-center antialiased">
+<div class="w-full max-w-[380px] h-full max-h-screen bg-[#141414] border-x border-white/5 flex flex-col relative shadow-2xl">
+<!-- TopAppBar (From JSON) -->
+<header class="bg-[#141414]/90 backdrop-blur-md text-[#5B5BD6] font-headline text-sm tracking-tight flex items-center justify-between px-4 h-12 w-full z-20 shrink-0 border-b border-white/5 shadow-sm ease-out duration-150">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px]">memory</span>
+<span class="font-display font-semibold text-[#5B5BD6] tracking-widest uppercase text-xs">Mnemium</span>
+</div>
+<button class="flex items-center justify-center p-1 rounded-md hover:bg-white/5 transition-colors">
+<span class="material-symbols-outlined text-[18px] text-neutral-500 hover:text-neutral-200 transition-colors duration-200">settings</span>
+</button>
+</header>
+<!-- Navigation Tabs & Caption -->
+<div class="px-5 pt-3 border-b border-white/5 bg-[#141414]/95 z-10 shrink-0">
+<div class="flex gap-6 h-9 items-end">
+<button class="text-neutral-500 hover:text-neutral-200 transition-colors duration-200 pb-2 text-sm font-body font-medium relative group">
+                    Memories
+                    <div class="absolute bottom-0 left-0 w-full h-[2px] bg-white/10 rounded-t-full opacity-0 group-hover:opacity-100 transition-opacity"></div>
+</button>
+<button class="text-white pb-2 text-sm font-body font-medium relative">
+                    Ledger
+                    <div class="absolute bottom-0 left-0 w-full h-[2px] bg-[#5B5BD6] rounded-t-full shadow-[0_-1px_4px_rgba(91,91,214,0.4)]"></div>
+</button>
+</div>
+<p class="text-xs text-neutral-500 pb-4 pt-1 font-body">Audit trail — every memory injected, and where.</p>
+</div>
+<!-- Ledger Timeline Content -->
+<div class="flex-1 overflow-y-auto px-5 py-6 relative custom-scrollbar">
+<div class="absolute left-[31px] top-8 bottom-8 w-px bg-gradient-to-b from-white/10 via-white/5 to-transparent"></div>
+<!-- Group 1 -->
+<div class="relative z-10 mb-8">
+<div class="flex items-center gap-3 mb-5">
+<div class="w-[28px] h-[28px] rounded-full bg-[#1a1a1a] border border-white/10 flex items-center justify-center shrink-0 z-10 shadow-sm">
+<span class="text-[11px] font-bold text-neutral-300 font-display">GPT</span>
+</div>
+<h3 class="text-xs font-medium text-neutral-400 font-body tracking-wide">ChatGPT <span class="text-neutral-600 mx-1">·</span> "Background script architecture"</h3>
+</div>
+<div class="pl-[42px] space-y-4">
+<!-- Standard Card -->
+<div class="relative group">
+<div class="absolute -left-[27px] top-[18px] w-[14px] h-px bg-white/10"></div>
+<div class="absolute -left-[30px] top-[15px] w-1.5 h-1.5 rounded-full bg-[#2a2a2a] border border-[#141414] z-10 group-hover:bg-[#5B5BD6] group-hover:border-[#5B5BD6] transition-colors duration-300"></div>
+<div class="bg-white/[0.02] border border-white/5 rounded-xl p-4 hover:bg-white/[0.04] hover:border-white/10 transition-all duration-200 ease-out shadow-sm">
+<p class="text-[#8A8A8F] text-[13px] leading-[1.6] font-body mb-4">User prefers modular architecture using ES6 modules. Ensure all new background scripts are separated by feature domain rather than unified in a single background.js file.</p>
+<div class="flex items-center justify-between mt-1">
+<div class="flex items-center gap-2.5">
+<span class="bg-white/5 text-neutral-300 text-[9px] px-2 py-0.5 rounded-full font-medium tracking-wider uppercase border border-white/5">PREFERENCE</span>
+<span class="font-mono text-[10px] text-neutral-500">today · 14:22</span>
+</div>
+<a class="text-neutral-500 group-hover:text-[#5B5BD6] text-[11px] font-medium flex items-center gap-0.5 transition-colors duration-200" href="#">
+                                    Jump to message
+                                    <span class="material-symbols-outlined text-[14px] mb-[1px]">call_made</span>
+</a>
+</div>
+</div>
+</div>
+<!-- Active/Hovered Card -->
+<div class="relative group">
+<div class="absolute -left-[27px] top-[18px] w-[14px] h-px bg-[#5B5BD6]/30"></div>
+<div class="absolute -left-[30px] top-[15px] w-1.5 h-1.5 rounded-full bg-[#5B5BD6] border border-[#141414] z-10 shadow-[0_0_8px_rgba(91,91,214,0.6)]"></div>
+<div class="bg-[#5B5BD6]/[0.04] border border-[#5B5BD6]/20 rounded-xl p-4 shadow-sm transform scale-[1.01] transition-all duration-300 ease-out ring-1 ring-[#5B5BD6]/10">
+<p class="text-[#8A8A8F] text-[13px] leading-[1.6] font-body mb-4">Stored snippet containing the customized webpack configuration for the service worker injection process.</p>
+<div class="flex items-center justify-between mt-1">
+<div class="flex items-center gap-2.5">
+<span class="bg-[#5B5BD6]/10 text-[#5B5BD6] text-[9px] px-2 py-0.5 rounded-full font-medium tracking-wider uppercase border border-[#5B5BD6]/20">CONTEXT</span>
+<span class="font-mono text-[10px] text-[#5B5BD6]/70">today · 14:18</span>
+</div>
+<a class="text-[#5B5BD6] hover:text-indigo-400 text-[11px] font-medium flex items-center gap-0.5 transition-colors" href="#">
+                                    Jump to message
+                                    <span class="material-symbols-outlined text-[14px] mb-[1px]">call_made</span>
+</a>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Group 2 -->
+<div class="relative z-10">
+<div class="flex items-center gap-3 mb-5">
+<div class="w-[28px] h-[28px] rounded-full bg-[#1a1a1a] border border-white/10 flex items-center justify-center shrink-0 z-10 shadow-sm">
+<span class="text-[11px] font-bold text-neutral-300 font-display">CL</span>
+</div>
+<h3 class="text-xs font-medium text-neutral-400 font-body tracking-wide">Claude <span class="text-neutral-600 mx-1">·</span> "Trip planning"</h3>
+</div>
+<div class="pl-[42px] space-y-4">
+<!-- Standard Card -->
+<div class="relative group">
+<div class="absolute -left-[27px] top-[18px] w-[14px] h-px bg-white/10"></div>
+<div class="absolute -left-[30px] top-[15px] w-1.5 h-1.5 rounded-full bg-[#2a2a2a] border border-[#141414] z-10 group-hover:bg-[#5B5BD6] group-hover:border-[#5B5BD6] transition-colors duration-300"></div>
+<div class="bg-white/[0.02] border border-white/5 rounded-xl p-4 hover:bg-white/[0.04] hover:border-white/10 transition-all duration-200 ease-out shadow-sm">
+<p class="text-[#8A8A8F] text-[13px] leading-[1.6] font-body mb-4">User is traveling to Tokyo next October. Prefers boutique hotels in quiet residential neighborhoods over major central hubs.</p>
+<div class="flex items-center justify-between mt-1">
+<div class="flex items-center gap-2.5">
+<span class="bg-white/5 text-neutral-300 text-[9px] px-2 py-0.5 rounded-full font-medium tracking-wider uppercase border border-white/5">FACT</span>
+<span class="font-mono text-[10px] text-neutral-500">yesterday · 09:10</span>
+</div>
+<a class="text-neutral-500 group-hover:text-[#5B5BD6] text-[11px] font-medium flex items-center gap-0.5 transition-colors duration-200" href="#">
+                                    Jump to message
+                                    <span class="material-symbols-outlined text-[14px] mb-[1px]">call_made</span>
+</a>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Bottom Spacer -->
+<div class="h-12 w-full"></div>
+</div>
+</div>
+</body></html>
