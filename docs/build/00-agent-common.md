@@ -19,4 +19,6 @@ You are implementing one module of the Mnemium browser extension. Read your spec
 git add -A
 git commit -m "feat(<scope>): <what you built>"
 ```
+**No attribution:** never add a `Co-Authored-By` trailer or any "Generated with AI" line to commits or PRs — the author is `msnotfound` only.
+
 Then print a short **DEV SUMMARY**: files created, key decisions, anything left as a TODO, and anything the integrator must wire up. The orchestrator reads this summary (and the diff only if needed).
