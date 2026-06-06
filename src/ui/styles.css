@@ -1,0 +1,80 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root,
+.mnem-ui {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  font-synthesis: none;
+  text-rendering: geometricPrecision;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+.mnem-ui ::selection {
+  background: var(--mnem-accent-soft);
+}
+
+.mnem-ui ::-webkit-scrollbar {
+  width: 4px;
+}
+
+.mnem-ui ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.mnem-ui ::-webkit-scrollbar-thumb {
+  background: var(--mnem-border);
+  border-radius: var(--mnem-radius-full);
+}
+
+.mnem-shell {
+  background: var(--mnem-bg);
+  color: var(--mnem-text);
+  font-family: var(--mnem-font-body);
+}
+
+.mnem-headline {
+  font-family: var(--mnem-font-headline);
+  letter-spacing: 0;
+}
+
+.mnem-mono {
+  font-family: var(--mnem-font-mono);
+}
+
+.mnem-muted-card {
+  background: color-mix(in srgb, var(--mnem-surface) 72%, transparent);
+  border: 1px solid var(--mnem-border-subtle);
+  border-radius: var(--mnem-radius-lg);
+}
+
+.mnem-icon {
+  align-items: center;
+  display: inline-flex;
+  font-family: var(--mnem-font-headline);
+  justify-content: center;
+  line-height: 1;
+}
