@@ -1,3 +1,5 @@
+import { fileURLToPath } from "node:url";
+
 import { defineConfig } from "wxt";
 
 // Mnemium MV3 config. Entrypoints (background, content scripts, popup, sidepanel,
@@ -6,6 +8,10 @@ import { defineConfig } from "wxt";
 // MAIN-world capture script's matches, commands, side panel, and WAR for wasm/models.
 export default defineConfig({
   srcDir: "src",
+  alias: {
+    "@core": fileURLToPath(new URL("./src/core", import.meta.url)),
+    "@shared": fileURLToPath(new URL("./src/shared", import.meta.url)),
+  },
   manifest: {
     name: "Mnemium",
     description: "Local-first, on-device memory for your AI chats.",
