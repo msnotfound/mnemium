@@ -115,6 +115,12 @@
   font-weight: 650;
 }
 
+.mnem-title-with-status {
+  align-items: center;
+  display: inline-flex;
+  gap: 10px;
+}
+
 .mnem-setting-card {
   background: color-mix(in srgb, var(--mnem-surface) 66%, transparent);
   border: 1px solid color-mix(in srgb, var(--mnem-border) 75%, transparent);
@@ -203,6 +209,124 @@
   padding: 10px 14px;
 }
 
+.mnem-backend-card .mnem-segmented {
+  margin-bottom: 16px;
+}
+
+.mnem-field-stack {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.mnem-field-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 16px;
+}
+
+.mnem-field {
+  color: var(--mnem-text-dim);
+  display: grid;
+  font-size: 12px;
+  font-weight: 600;
+  gap: 8px;
+}
+
+.mnem-field input,
+.mnem-field textarea,
+.mnem-field select {
+  background: var(--mnem-bg);
+  border: 1px solid var(--mnem-border);
+  border-radius: var(--mnem-radius-md);
+  color: var(--mnem-text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  min-width: 0;
+  padding: 10px 12px;
+  width: 100%;
+}
+
+.mnem-field textarea {
+  min-height: 80px;
+  resize: vertical;
+}
+
+.mnem-status-line {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.mnem-daemon-dot {
+  background: color-mix(in srgb, var(--mnem-text) 28%, transparent);
+  border-radius: var(--mnem-radius-full);
+  display: inline-block;
+  flex: 0 0 auto;
+  height: 9px;
+  width: 9px;
+}
+
+.mnem-daemon-dot.is-success {
+  background: var(--mnem-online);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--mnem-online) 18%, transparent);
+}
+
+.mnem-daemon-dot.is-warning {
+  background: #c9a227;
+  box-shadow: 0 0 0 4px color-mix(in srgb, #c9a227 18%, transparent);
+}
+
+.mnem-daemon-dot.is-neutral {
+  background: color-mix(in srgb, var(--mnem-text) 32%, transparent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--mnem-text) 8%, transparent);
+}
+
+.mnem-daemon-pairing button,
+.mnem-pairing-actions button {
+  background: color-mix(in srgb, var(--mnem-text) 8%, transparent);
+  border: 1px solid var(--mnem-border);
+  border-radius: var(--mnem-radius-md);
+  color: var(--mnem-text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  padding: 9px 14px;
+}
+
+.mnem-pairing-state,
+.mnem-pairing-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.mnem-pairing-state span {
+  color: var(--mnem-text-dim);
+  flex: 1;
+  font-size: 13px;
+  min-width: 220px;
+}
+
+.mnem-inline-success,
+.mnem-inline-error {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.mnem-inline-success {
+  color: var(--mnem-online);
+}
+
+.mnem-inline-error {
+  color: #d85f5f;
+}
+
 .mnem-warning {
   border-top: 1px solid var(--mnem-border-subtle);
   color: var(--mnem-text-dim);
@@ -269,4 +393,18 @@
 .mnem-data a {
   color: var(--mnem-memory);
   font-size: 12px;
+}
+
+@media (max-width: 720px) {
+  .mnem-field-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .mnem-segmented {
+    overflow-x: auto;
+  }
+
+  .mnem-segmented button {
+    min-width: max-content;
+  }
 }
