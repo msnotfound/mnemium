@@ -1,0 +1,9 @@
+# Local build artifacts
+/bin/
+/dist/
+*.exe
+
+# Test outputs
+*.test
+*.out
+coverage.out
