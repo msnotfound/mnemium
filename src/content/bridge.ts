@@ -1,5 +1,6 @@
 import type { Rpc } from "@/shared/rpc";
 import type { Exchange } from "@/shared/types";
+import { sendRpc as runtimeSendRpc } from "@/runtime/rpc";
 
 export type ExchangeListener = (exchange: Exchange) => void;
 export type RouteListener = () => void;
@@ -16,7 +17,6 @@ interface MainBridgeRouteMessage {
 }
 
 type MainBridgeMessage = MainBridgeExchangeMessage | MainBridgeRouteMessage;
-type RuntimeSendRpc = (msg: Rpc) => Promise<unknown>;
 
 export function subscribeMainExchanges(listener: ExchangeListener): () => void {
   const onMessage = (event: MessageEvent<unknown>): void => {
@@ -70,7 +70,6 @@ export async function forwardExchangeToRuntime(exchange: Exchange): Promise<void
 }
 
 export async function sendRpc(msg: Rpc): Promise<unknown> {
-  const runtimeSendRpc = await loadRuntimeSendRpc();
   return runtimeSendRpc(msg);
 }
 
@@ -84,27 +83,6 @@ function isMainBridgeMessage(value: unknown): value is MainBridgeMessage {
   }
 
   return value.type === "exchange" && isRecord(value.payload);
-}
-
-async function loadRuntimeSendRpc(): Promise<RuntimeSendRpc> {
-  try {
-    // TODO(runtime): replace this fallback once "@/runtime/rpc" is present in the merged tree.
-    // Dynamic import keeps this module loadable while the runtime agent owns that path.
-    const dynamicImport = new Function("specifier", "return import(specifier)") as (
-      specifier: string,
-    ) => Promise<unknown>;
-    const module = await dynamicImport("@/runtime/rpc");
-    if (isRecord(module) && typeof module.sendRpc === "function") {
-      return module.sendRpc as RuntimeSendRpc;
-    }
-  } catch {
-    // Runtime module is owned by another build agent; fall back to direct extension messaging.
-  }
-
-  return async (msg: Rpc): Promise<unknown> => {
-    const reqId = crypto.randomUUID();
-    return chrome.runtime.sendMessage({ reqId, msg });
-  };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

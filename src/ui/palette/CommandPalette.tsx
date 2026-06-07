@@ -12,7 +12,7 @@ export interface CommandPaletteProps {
 }
 
 export function CommandPalette({ open = true, onClose }: CommandPaletteProps): ReactElement | null {
-  const [query, setQuery] = useState("typescript");
+  const [query, setQuery] = useState("");
   const [memories, setMemories] = useState<Memory[]>([]);
   const [active, setActive] = useState(0);
 

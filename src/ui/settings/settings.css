@@ -58,21 +58,39 @@
   margin: 4px 0 0;
 }
 
-.mnem-settings-nav a {
+.mnem-settings-nav a,
+.mnem-settings-tab {
   align-items: center;
+  background: transparent;
+  border: 0;
   border-radius: var(--mnem-radius-md);
   color: var(--mnem-memory);
+  cursor: pointer;
   display: flex;
+  font: inherit;
   font-size: 14px;
   font-weight: 550;
   gap: 12px;
   padding: 10px 12px;
+  text-align: left;
   text-decoration: none;
+  width: 100%;
 }
 
-.mnem-settings-nav a.is-active {
+.mnem-settings-nav a.is-active,
+.mnem-settings-tab.is-active {
   background: var(--mnem-accent-soft);
   color: var(--mnem-accent);
+}
+
+.mnem-settings-tab:hover:not(.is-active) {
+  background: color-mix(in srgb, var(--mnem-text) 4%, transparent);
+}
+
+.mnem-settings-loading {
+  color: color-mix(in srgb, var(--mnem-text) 60%, transparent);
+  font-size: 13px;
+  margin: 0 0 24px;
 }
 
 .mnem-settings-main {

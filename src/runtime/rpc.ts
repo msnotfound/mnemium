@@ -11,19 +11,29 @@ export interface ServeOptions {
 
 export async function sendRpc<T = unknown>(msg: Rpc): Promise<T> {
   const reqId = crypto.randomUUID();
-  const response = await chrome.runtime.sendMessage<RpcEnvelope, RpcResponse>({
-    reqId,
-    msg,
-  });
+  console.info("[mnemium/rpc] →", msg.t, reqId);
+  let response: RpcResponse | undefined;
+  try {
+    response = await chrome.runtime.sendMessage<RpcEnvelope, RpcResponse>({
+      reqId,
+      msg,
+    });
+  } catch (error) {
+    console.error("[mnemium/rpc] sendMessage threw", msg.t, error);
+    throw error;
+  }
 
   if (!isRpcResponse(response) || response.reqId !== reqId) {
+    console.error("[mnemium/rpc] invalid response", msg.t, response);
     throw new Error("Invalid RPC response");
   }
 
   if (!response.ok) {
+    console.error("[mnemium/rpc] ←✗", msg.t, response.error);
     throw new Error(response.error);
   }
 
+  console.info("[mnemium/rpc] ←✓", msg.t);
   return response.data as T;
 }
 

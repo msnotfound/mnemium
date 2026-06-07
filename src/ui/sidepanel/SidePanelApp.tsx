@@ -2,8 +2,8 @@ import type { Memory } from "@shared/types";
 import type { ReactElement } from "react";
 import { useEffect, useState } from "react";
 
-import { BrandHeader, MemoryRow, SearchField, SurfaceRoot, TypeTag } from "../components/Primitives";
-import { demoLedger, listMemories, sourceLabel } from "../components/rpc";
+import { BrandHeader, MemoryRow, SearchField, SurfaceRoot } from "../components/Primitives";
+import { listMemories, sourceLabel } from "../components/rpc";
 import { OnboardingApp } from "../onboarding/OnboardingApp";
 import { SettingsApp } from "../settings/SettingsApp";
 import "./sidepanel.css";
@@ -66,28 +66,10 @@ function LedgerTimeline(): ReactElement {
   return (
     <main className="mnem-ledger" aria-label="Ledger timeline">
       <div className="mnem-ledger-line" />
-      {demoLedger.map((entry, index) => (
-        <section className="mnem-ledger-group" key={entry.id}>
-          {index === 0 || demoLedger[index - 1]?.threadId !== entry.threadId ? (
-            <header className="mnem-ledger-thread">
-              <span>{entry.source.slice(0, 3).toUpperCase()}</span>
-              <h3>
-                {entry.source} <b>·</b> “{entry.threadTitle}”
-              </h3>
-            </header>
-          ) : null}
-          <article className={index === 1 ? "mnem-ledger-card is-active" : "mnem-ledger-card"}>
-            <p>{entry.content}</p>
-            <footer>
-              <span>
-                <TypeTag type={entry.type} subtle={index !== 1} />
-                <time className="mnem-mono">{new Date(entry.injectedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time>
-              </span>
-              <a href={`#${entry.messageId}`}>Jump to message ↗</a>
-            </footer>
-          </article>
-        </section>
-      ))}
+      <section className="mnem-ledger-empty">
+        <p>No injections logged yet.</p>
+        <small>Every memory you inject into a chat will be recorded here.</small>
+      </section>
     </main>
   );
 }

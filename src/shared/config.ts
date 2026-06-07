@@ -24,6 +24,17 @@ export const DEFAULT_CONFIG: Config = {
   embedder: { id: "bge-small-en-v1.5" },
   autoInject: { enabled: false, epsilon: 0.12, floor: 0.72, sensitivity: 0.5 },
   sites: { chatgpt: true, claude: true, gemini: true, grok: true, deepseek: true },
-  hotkey: "Ctrl+Shift+M",
+  hotkey: "Alt+Shift+M",
   theme: "system",
 };
+
+export function mergeConfig(base: Config, patch: Partial<Config>): Config {
+  return {
+    ...base,
+    ...patch,
+    memoryModel: patch.memoryModel ?? base.memoryModel,
+    embedder: { ...base.embedder, ...patch.embedder },
+    autoInject: { ...base.autoInject, ...patch.autoInject },
+    sites: { ...base.sites, ...patch.sites },
+  };
+}

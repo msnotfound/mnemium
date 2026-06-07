@@ -3,7 +3,7 @@ import type { SurfacedChunk } from "@shared/types";
 import { render, type JSX, type VNode } from "preact";
 import { useState } from "preact/hooks";
 
-import { acceptChunk, demoChunks, dismissChunk, type InjectionContext } from "../components/rpc";
+import { acceptChunk, dismissChunk, type InjectionContext } from "../components/rpc";
 import { tokenStyle } from "../components/theme";
 import { tokens } from "../tokens";
 
@@ -18,7 +18,7 @@ export function mountInPageUI(container: HTMLElement, props: InPageUIProps = {})
   return () => render(null, root);
 }
 
-function InPageMemoryBlock({ chunks = demoChunks, onInject, scopeUri, threadId, messageId }: InPageUIProps): VNode {
+function InPageMemoryBlock({ chunks = [], onInject, scopeUri, threadId, messageId }: InPageUIProps): VNode {
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState(chunks);
   const context: InjectionContext = {
@@ -71,7 +71,7 @@ function InPageMemoryBlock({ chunks = demoChunks, onInject, scopeUri, threadId, 
       </div>
       <button className="badge" onClick={() => setOpen((current) => !current)} type="button" aria-label="Toggle Mnemium memory">
         <span />
-        Memory <kbd>⌘J</kbd>
+        Memory <kbd>Alt+⇧+M</kbd>
       </button>
     </div>
   );

@@ -41,24 +41,6 @@ interface SqliteVecLoader {
 
 type WasmBindValue = SqlValue | readonly SqlValue[];
 
-interface WasmExecOptions {
-  sql: string;
-  bind?: WasmBindValue;
-  returnValue?: "resultRows";
-  rowMode?: "object";
-}
-
-interface WasmDatabase {
-  exec(sqlOrOptions: string | WasmExecOptions): unknown;
-  close(): void;
-}
-
-interface WasmFactoryResult {
-  oo1: {
-    DB: new (filename: string, mode?: string, vfs?: string) => WasmDatabase;
-  };
-}
-
 const SCHEMA_VERSION = 1;
 const schemaUrl = new URL("./schema.sql", import.meta.url);
 
@@ -74,10 +56,11 @@ export async function openNode(path = ":memory:"): Promise<Database> {
 }
 
 export async function openOpfs(filename = "mnemium.sqlite3"): Promise<Database> {
-  const sqlite3 = await importWasmSqlite();
-  const db = new sqlite3.oo1.DB(filename, "ct", "opfs-sahpool");
-  await tryLoadWasmSqliteVec(db);
-  const wrapped = new WasmDatabaseAdapter(db);
+  // sqlite-wasm + sqlite-vec run inside a dedicated Worker because the offscreen
+  // main thread lacks FileSystemSyncAccessHandle (Worker-only on this Chromium).
+  const worker = new Worker(new URL("./sqlite-worker.ts", import.meta.url), { type: "module" });
+  const wrapped = new WorkerDatabaseAdapter(worker);
+  await wrapped.open(filename);
   await initialize(wrapped, await readSchemaForBrowser());
   return wrapped;
 }
@@ -125,18 +108,6 @@ async function tryLoadSqliteVec(db: BetterSqliteDatabase): Promise<void> {
   loader.load(db);
 }
 
-async function tryLoadWasmSqliteVec(db: WasmDatabase): Promise<void> {
-  const mod = (await import("sqlite-vec")) as unknown as Partial<{
-    load(db: WasmDatabase): void | Promise<void>;
-    default: Partial<{ load(db: WasmDatabase): void | Promise<void> }>;
-  }>;
-  const loader = mod.load === undefined ? mod.default : mod;
-  if (loader?.load === undefined) {
-    throw new Error("sqlite-vec did not expose a wasm load(db) function");
-  }
-  await loader.load(db);
-}
-
 async function nodeRequire(): Promise<(specifier: string) => unknown> {
   const module = await nodeImport<{ createRequire(url: string): (specifier: string) => unknown }>("node:module");
   return module.createRequire(import.meta.url);
@@ -144,16 +115,6 @@ async function nodeRequire(): Promise<(specifier: string) => unknown> {
 
 async function nodeImport<T>(specifier: string): Promise<T> {
   return (await import(/* @vite-ignore */ specifier)) as T;
-}
-
-async function importWasmSqlite(): Promise<WasmFactoryResult> {
-  const mod = await import("@sqlite.org/sqlite-wasm");
-  const candidate = mod as { default?: unknown; sqlite3InitModule?: unknown };
-  const initializer = candidate.default ?? candidate.sqlite3InitModule;
-  if (typeof initializer !== "function") {
-    throw new Error("@sqlite.org/sqlite-wasm did not expose an initializer");
-  }
-  return (await (initializer as () => Promise<unknown>)()) as WasmFactoryResult;
 }
 
 class BetterSqliteDatabaseAdapter implements Database {
@@ -195,35 +156,101 @@ class BetterSqliteDatabaseAdapter implements Database {
   }
 }
 
-class WasmDatabaseAdapter implements Database {
-  constructor(private readonly db: WasmDatabase) {}
+interface WorkerResponse {
+  id: string;
+  ok: boolean;
+  data?: unknown;
+  error?: string;
+}
+
+interface WorkerExecOptions {
+  sql: string;
+  bind?: WasmBindValue;
+  rowMode?: "object";
+  returnValue?: "resultRows";
+}
+
+type WorkerRequestPayload =
+  | { t: "open"; filename: string }
+  | { t: "exec"; payload: string | WorkerExecOptions }
+  | { t: "close" };
+
+class WorkerDatabaseAdapter implements Database {
+  private nextId = 0;
+  private readonly pending = new Map<
+    string,
+    { resolve(data: unknown): void; reject(err: Error): void }
+  >();
+  private terminated = false;
+
+  constructor(private readonly worker: Worker) {
+    worker.addEventListener("message", (event: MessageEvent<WorkerResponse>) => {
+      const handler = this.pending.get(event.data.id);
+      if (handler === undefined) return;
+      this.pending.delete(event.data.id);
+      if (event.data.ok) {
+        handler.resolve(event.data.data);
+      } else {
+        handler.reject(new Error(event.data.error ?? "sqlite worker error"));
+      }
+    });
+    worker.addEventListener("error", (event: ErrorEvent) => {
+      const message = event.message || "sqlite worker crashed";
+      for (const handler of this.pending.values()) {
+        handler.reject(new Error(message));
+      }
+      this.pending.clear();
+    });
+  }
+
+  private send(request: WorkerRequestPayload): Promise<unknown> {
+    if (this.terminated) {
+      return Promise.reject(new Error("sqlite worker terminated"));
+    }
+    const id = `r${this.nextId++}`;
+    const promise = new Promise<unknown>((resolve, reject) => {
+      this.pending.set(id, { resolve, reject });
+    });
+    this.worker.postMessage({ id, ...request });
+    return promise;
+  }
+
+  async open(filename: string): Promise<void> {
+    await this.send({ t: "open", filename });
+  }
 
   async exec(sql: string): Promise<void> {
-    this.db.exec(sql);
+    await this.send({ t: "exec", payload: sql });
   }
 
   prepare(sql: string): SqlStatement {
     return {
       run: async (params?: SqlParams) => {
-        this.db.exec({ sql, bind: normalizeWasmParams(params) });
+        await this.send({ t: "exec", payload: { sql, bind: normalizeWasmParams(params) } });
         return { changes: 0 };
       },
       get: async <T extends SqlRow = SqlRow>(params?: SqlParams) => {
-        const rows = this.db.exec({
-          sql,
-          bind: normalizeWasmParams(params),
-          rowMode: "object",
-          returnValue: "resultRows",
-        }) as SqlRow[];
+        const rows = (await this.send({
+          t: "exec",
+          payload: {
+            sql,
+            bind: normalizeWasmParams(params),
+            rowMode: "object",
+            returnValue: "resultRows",
+          },
+        })) as SqlRow[];
         return rows[0] as T | undefined;
       },
       all: async <T extends SqlRow = SqlRow>(params?: SqlParams) =>
-        this.db.exec({
-          sql,
-          bind: normalizeWasmParams(params),
-          rowMode: "object",
-          returnValue: "resultRows",
-        }) as T[],
+        (await this.send({
+          t: "exec",
+          payload: {
+            sql,
+            bind: normalizeWasmParams(params),
+            rowMode: "object",
+            returnValue: "resultRows",
+          },
+        })) as T[],
     };
   }
 
@@ -244,7 +271,12 @@ class WasmDatabaseAdapter implements Database {
   }
 
   async close(): Promise<void> {
-    this.db.close();
+    try {
+      await this.send({ t: "close" });
+    } finally {
+      this.terminated = true;
+      this.worker.terminate();
+    }
   }
 }
 

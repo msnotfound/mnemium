@@ -76,6 +76,26 @@
   position: relative;
 }
 
+.mnem-ledger-empty {
+  align-items: center;
+  color: color-mix(in srgb, var(--mnem-text) 56%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 80px 24px;
+  text-align: center;
+}
+
+.mnem-ledger-empty p {
+  font-family: var(--mnem-font-headline);
+  font-size: 14px;
+  margin: 0;
+}
+
+.mnem-ledger-empty small {
+  font-size: 12px;
+}
+
 .mnem-ledger-line {
   background: linear-gradient(to bottom, color-mix(in srgb, var(--mnem-text) 10%, transparent), transparent);
   bottom: 40px;

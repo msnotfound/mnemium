@@ -12,6 +12,7 @@ export async function ensureOffscreen(): Promise<void> {
     return creatingOffscreen;
   }
 
+  console.info("[mnemium/bg] creating offscreen doc");
   creatingOffscreen = chrome.offscreen.createDocument({
     url: "offscreen.html",
     reasons: [chrome.offscreen.Reason.WORKERS],
@@ -20,6 +21,7 @@ export async function ensureOffscreen(): Promise<void> {
 
   try {
     await creatingOffscreen;
+    console.info("[mnemium/bg] offscreen doc ready");
   } finally {
     creatingOffscreen = null;
   }

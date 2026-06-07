@@ -32,6 +32,14 @@
   overflow: hidden;
 }
 
+.mnem-popup-empty {
+  color: color-mix(in srgb, var(--mnem-text) 60%, transparent);
+  font-size: 12px;
+  margin: 0;
+  padding: 18px 14px;
+  text-align: center;
+}
+
 .mnem-popup-footer {
   align-items: center;
   border-top: 1px solid var(--mnem-border);

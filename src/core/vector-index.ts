@@ -5,10 +5,12 @@ import type { MemoryType } from "@shared/types";
 const META_DIM_PREFIX = "vector.dim.";
 
 export class SqliteVectorIndex implements VectorIndexContract {
+  private disabled = false;
+
   constructor(private readonly db: Database) {}
 
   async upsert(modelId: string, rows: { id: string; vec: Float32Array }[]): Promise<void> {
-    if (rows.length === 0) {
+    if (this.disabled || rows.length === 0) {
       return;
     }
     const dim = rows[0]?.vec.length;
@@ -21,28 +23,35 @@ export class SqliteVectorIndex implements VectorIndexContract {
       }
     }
     const table = tableForModel(modelId);
-    await this.ensureModelTable(modelId, table, dim);
-    const insertMap = this.db.prepare(
-      `INSERT INTO ${quoteIdent(mapTable(table))} (memory_id) VALUES (?)
-       ON CONFLICT(memory_id) DO NOTHING`,
-    );
-    const selectMap = this.db.prepare(`SELECT rowid FROM ${quoteIdent(mapTable(table))} WHERE memory_id = ?`);
-    const deleteVector = this.db.prepare(`DELETE FROM ${quoteIdent(table)} WHERE rowid = ?`);
-    const insertVector = this.db.prepare(
-      `INSERT INTO ${quoteIdent(table)} (rowid, embedding) VALUES (?, ?)`,
-    );
+    try {
+      await this.ensureModelTable(modelId, table, dim);
+      const insertMap = this.db.prepare(
+        `INSERT INTO ${quoteIdent(mapTable(table))} (memory_id) VALUES (?)
+         ON CONFLICT(memory_id) DO NOTHING`,
+      );
+      const selectMap = this.db.prepare(`SELECT rowid FROM ${quoteIdent(mapTable(table))} WHERE memory_id = ?`);
+      const deleteVector = this.db.prepare(`DELETE FROM ${quoteIdent(table)} WHERE rowid = ?`);
+      const insertVector = this.db.prepare(
+        `INSERT INTO ${quoteIdent(table)} (rowid, embedding) VALUES (?, ?)`,
+      );
 
-    await this.db.transaction(async () => {
-      for (const row of rows) {
-        await insertMap.run([row.id]);
-        const mapped = await selectMap.get<RowIdRow>([row.id]);
-        if (mapped === undefined) {
-          throw new Error(`Unable to map vector row for memory ${row.id}`);
+      await this.db.transaction(async () => {
+        for (const row of rows) {
+          await insertMap.run([row.id]);
+          const mapped = await selectMap.get<RowIdRow>([row.id]);
+          if (mapped === undefined) {
+            throw new Error(`Unable to map vector row for memory ${row.id}`);
+          }
+          await deleteVector.run([BigInt(mapped.rowid)]);
+          await insertVector.run([BigInt(mapped.rowid), serializeVector(row.vec)]);
         }
-        await deleteVector.run([BigInt(mapped.rowid)]);
-        await insertVector.run([BigInt(mapped.rowid), serializeVector(row.vec)]);
+      });
+    } catch (error) {
+      if (this.handleMissingVec(error)) {
+        return;
       }
-    });
+      throw error;
+    }
   }
 
   async search(
@@ -51,44 +60,77 @@ export class SqliteVectorIndex implements VectorIndexContract {
     k: number,
     filter?: { scopePrefix?: string; type?: MemoryType[] },
   ): Promise<Array<{ id: string; score: number }>> {
-    if (k <= 0) {
+    if (this.disabled || k <= 0) {
       return [];
     }
     const table = tableForModel(modelId);
-    await this.assertDim(modelId, q.length);
+    try {
+      await this.assertDim(modelId, q.length);
 
-    const where = ["memory.is_latest = 1", "memory.is_forgotten = 0"];
-    const params: SqlValue[] = [serializeVector(q), k];
-    if (filter?.scopePrefix !== undefined) {
-      where.push("memory.scope_uri LIKE ?");
-      params.push(`${filter.scopePrefix}%`);
+      const where = ["memory.is_latest = 1", "memory.is_forgotten = 0"];
+      const params: SqlValue[] = [serializeVector(q), k];
+      if (filter?.scopePrefix !== undefined) {
+        where.push("memory.scope_uri LIKE ?");
+        params.push(`${filter.scopePrefix}%`);
+      }
+      if (filter?.type !== undefined && filter.type.length > 0) {
+        where.push(`memory.type IN (${filter.type.map(() => "?").join(", ")})`);
+        params.push(...filter.type);
+      }
+
+      const rows = await this.db.prepare(
+        `SELECT map.memory_id AS id, vec.distance AS distance
+         FROM ${quoteIdent(table)} AS vec
+         JOIN ${quoteIdent(mapTable(table))} AS map ON map.rowid = vec.rowid
+         JOIN memory ON memory.id = map.memory_id
+         WHERE vec.embedding MATCH ? AND k = ? AND ${where.join(" AND ")}
+         ORDER BY vec.distance
+         LIMIT ${toLimit(k)}`,
+      ).all<VectorSearchRow>(params);
+
+      return rows.map((row) => ({
+        id: row.id,
+        score: distanceToScore(row.distance),
+      }));
+    } catch (error) {
+      if (this.handleMissingVec(error)) {
+        return [];
+      }
+      throw error;
     }
-    if (filter?.type !== undefined && filter.type.length > 0) {
-      where.push(`memory.type IN (${filter.type.map(() => "?").join(", ")})`);
-      params.push(...filter.type);
-    }
-
-    const rows = await this.db.prepare(
-      `SELECT map.memory_id AS id, vec.distance AS distance
-       FROM ${quoteIdent(table)} AS vec
-       JOIN ${quoteIdent(mapTable(table))} AS map ON map.rowid = vec.rowid
-       JOIN memory ON memory.id = map.memory_id
-       WHERE vec.embedding MATCH ? AND k = ? AND ${where.join(" AND ")}
-       ORDER BY vec.distance
-       LIMIT ${toLimit(k)}`,
-    ).all<VectorSearchRow>(params);
-
-    return rows.map((row) => ({
-      id: row.id,
-      score: distanceToScore(row.distance),
-    }));
   }
 
   async drop(modelId: string): Promise<void> {
+    if (this.disabled) {
+      return;
+    }
     const table = tableForModel(modelId);
-    await this.db.exec(`DROP TABLE IF EXISTS ${quoteIdent(table)}`);
-    await this.db.exec(`DROP TABLE IF EXISTS ${quoteIdent(mapTable(table))}`);
-    await this.db.prepare("DELETE FROM meta WHERE key = ?").run([dimMetaKey(modelId)]);
+    try {
+      await this.db.exec(`DROP TABLE IF EXISTS ${quoteIdent(table)}`);
+      await this.db.exec(`DROP TABLE IF EXISTS ${quoteIdent(mapTable(table))}`);
+      await this.db.prepare("DELETE FROM meta WHERE key = ?").run([dimMetaKey(modelId)]);
+    } catch (error) {
+      if (this.handleMissingVec(error)) {
+        return;
+      }
+      throw error;
+    }
+  }
+
+  /** Returns true if the error indicates sqlite-vec isn't loaded; flips the
+   *  instance to no-op mode and logs once. The rest of the engine (FTS,
+   *  document/chunk/memory writes) keeps working. */
+  private handleMissingVec(error: unknown): boolean {
+    if (this.disabled) return true;
+    const message = error instanceof Error ? error.message : String(error);
+    if (/no such module:?\s*vec0|no such function:?\s*vec_/i.test(message)) {
+      this.disabled = true;
+      console.warn(
+        "[mnemium/vec] vec0 extension not loaded; vector index disabled (FTS-only retrieval).",
+      );
+      return true;
+    }
+    return false;
   }
 
   private async ensureModelTable(modelId: string, table: string, dim: number): Promise<void> {

@@ -15,6 +15,11 @@ export default defineConfig({
   manifest: {
     name: "Mnemium",
     description: "Local-first, on-device memory for your AI chats.",
+    // MV3 default CSP rejects WebAssembly.instantiate(); 'wasm-unsafe-eval' is the
+    // documented opt-in for sqlite-wasm, WebLLM, and transformers.js.
+    content_security_policy: {
+      extension_pages: "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';",
+    },
     permissions: ["storage", "unlimitedStorage", "offscreen", "scripting", "sidePanel"],
     host_permissions: [
       "https://chatgpt.com/*",
@@ -27,7 +32,8 @@ export default defineConfig({
     ],
     commands: {
       "pull-memory": {
-        suggested_key: { default: "Ctrl+Shift+M", mac: "Command+Shift+M" },
+        // Ctrl+Shift+M is taken by Thorium/Chrome profile menu; Alt+Shift+M is safe.
+        suggested_key: { default: "Alt+Shift+M" },
         description: "Pull relevant memory into the current chat",
       },
     },
