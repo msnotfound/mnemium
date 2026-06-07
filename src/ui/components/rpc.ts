@@ -25,7 +25,20 @@ export async function deleteMemory(memoryId: string): Promise<void> {
 }
 
 export async function exportVault(): Promise<void> {
-  await sendRpc({ t: "ui.export" });
+  const result = await sendRpc<{ filename: string; content: string }>({ t: "ui.export" });
+  if (result === undefined || typeof result.content !== "string") {
+    console.warn("[mnemium/rpc] export returned no payload");
+    return;
+  }
+  const blob = new Blob([result.content], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = result.filename ?? "mnemium-export.json";
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  URL.revokeObjectURL(url);
 }
 
 export async function getSettings(): Promise<Config | undefined> {

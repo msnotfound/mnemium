@@ -193,12 +193,41 @@ async function handleUiDelete(msg: Extract<Rpc, { t: "ui.delete" }>): Promise<{ 
 
 async function handleUiExport(
   _msg: Extract<Rpc, { t: "ui.export" }>,
-  envelope: RpcEnvelope,
-): Promise<{ exported: false; reason: string; reqId: string }> {
+  _envelope: RpcEnvelope,
+): Promise<{ filename: string; content: string }> {
+  const runtime = await engine();
+  const [memories, documents, chunks] = await Promise.all([
+    runtime.memories.byScope("", { limit: 100000 }),
+    runtime.db
+      .prepare(
+        `SELECT id, source_type, provider, uri, title, scope_uri, captured_at, raw_content
+         FROM document ORDER BY captured_at DESC`,
+      )
+      .all<Record<string, unknown>>(),
+    runtime.db
+      .prepare(
+        `SELECT id, document_id, ord, text
+         FROM chunk ORDER BY document_id, ord`,
+      )
+      .all<Record<string, unknown>>(),
+  ]);
+  const payload = {
+    exportedAt: new Date().toISOString(),
+    schema: "mnemium.v0.1",
+    counts: {
+      memories: memories.length,
+      documents: documents.length,
+      chunks: chunks.length,
+    },
+    memories,
+    documents,
+    chunks,
+  };
+  const now = new Date();
+  const timestamp = now.toISOString().replace(/[:.]/g, "-").slice(0, 19);
   return {
-    exported: false,
-    reason: "sqlite export requires UI download wiring",
-    reqId: envelope.reqId,
+    filename: `mnemium-export-${timestamp}.json`,
+    content: JSON.stringify(payload, null, 2),
   };
 }
 

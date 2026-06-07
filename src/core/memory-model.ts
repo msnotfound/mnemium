@@ -105,12 +105,13 @@ export class ApiKeyMemoryModel implements MemoryModelContract {
 
 export function heuristicDistill(ex: Exchange): { memories: DraftMemory[]; entities: Entity[] } {
   const scopeUri = scopeForExchange(ex);
-  const text = `${ex.userText}\n${ex.assistantText}`;
+  const text = stripMarkdown(`${ex.userText}\n${ex.assistantText}`);
   const entities = extractEntities(text, scopeUri);
   const sentences = text
     .split(/(?<=[.!?])\s+|\n+/)
     .map((sentence) => sentence.trim())
-    .filter((sentence) => sentence.length >= 24)
+    .filter((sentence) => sentence.length >= 24 && sentence.length <= 500)
+    .filter((sentence) => /[a-z]/i.test(sentence))
     .slice(0, 6);
   const memories = sentences
     .map((sentence): DraftMemory => ({
@@ -125,6 +126,25 @@ export function heuristicDistill(ex: Exchange): { memories: DraftMemory[]; entit
     }))
     .filter((memory) => memory.content.length > 0);
   return { memories, entities };
+}
+
+/** Lightweight markdown stripper so sentence-splitting doesn't get confused by
+ *  `**bold**`, `## headings`, fenced code blocks, list markers, or links. The
+ *  goal isn't perfect rendering — just clean enough that the next regex-based
+ *  sentence split produces readable memory content. */
+function stripMarkdown(input: string): string {
+  return input
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/`[^`\n]+`/g, " ")
+    .replace(/^\s{0,3}#{1,6}\s+/gm, "")
+    .replace(/\*\*([^*\n]+)\*\*/g, "$1")
+    .replace(/__([^_\n]+)__/g, "$1")
+    .replace(/(^|\s)\*([^*\n]+)\*(?=\s|$)/g, "$1$2")
+    .replace(/(^|\s)_([^_\n]+)_(?=\s|$)/g, "$1$2")
+    .replace(/^\s*[-*+]\s+/gm, "")
+    .replace(/^\s*\d+\.\s+/gm, "")
+    .replace(/!?\[([^\]]+)\]\([^)\s]+\)/g, "$1")
+    .replace(/\n{3,}/g, "\n\n");
 }
 
 function distillMessages(ex: Exchange): ChatMessage[] {

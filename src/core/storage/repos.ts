@@ -128,8 +128,12 @@ class SqlMemoryRepo implements MemoryRepo {
     query: string,
     opts: { scopePrefix?: string; type?: MemoryType[]; k: number },
   ): Promise<Memory[]> {
+    const ftsQuery = toFtsPrefixQuery(query);
+    if (ftsQuery.length === 0) {
+      return [];
+    }
     const where = ["memory.is_latest = 1", "memory.is_forgotten = 0", "fts_memory MATCH ?"];
-    const bind: Array<string | number> = [query];
+    const bind: Array<string | number> = [ftsQuery];
     if (opts.scopePrefix !== undefined) {
       where.push("memory.scope_uri LIKE ?");
       bind.push(`${opts.scopePrefix}%`);
@@ -341,6 +345,21 @@ function appendTypeFilter(
   }
   where.push(`${column} IN (${type.map(() => "?").join(", ")})`);
   bind.push(...type);
+}
+
+/** Build an FTS5 MATCH expression that prefix-matches each typed token so
+ *  "py" finds "python" and "scr j" finds "script javascript". FTS5
+ *  operators (parens, quotes, dashes, colons, AND/OR/NEAR) in raw user
+ *  input would throw — strip everything but word chars, then append `*`. */
+function toFtsPrefixQuery(query: string): string {
+  const tokens = query
+    .toLowerCase()
+    .replace(/[^a-z0-9\s_]/g, " ")
+    .split(/\s+/)
+    .filter((token) => token.length > 0);
+  if (tokens.length === 0) return "";
+  // Implicit AND between tokens is FTS5's default. Each gets a prefix glob.
+  return tokens.map((token) => `${token}*`).join(" ");
 }
 
 function boolToInt(value: boolean): number {

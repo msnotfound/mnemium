@@ -381,11 +381,25 @@ function collectJsonValues(
   role: string | null,
 ): void {
   if (typeof value === "string") {
-    if (value.trim().length > 0) {
-      values.texts.push(value.trim());
-      if (role !== null) {
-        values.roleTexts.set(role, appendText(values.roleTexts.get(role), value.trim()));
+    const trimmed = value.trim();
+    if (trimmed.length === 0) {
+      return;
+    }
+    // Google's batchexecute (Gemini) and a few other providers embed entire
+    // JSON structures as escaped strings inside the outer payload. If a string
+    // is itself parseable as a non-primitive JSON value, recurse into it
+    // instead of pushing the wrapper as text — otherwise the longest string
+    // we collect ends up being the inner JSON envelope, not the prose inside.
+    if ((trimmed.startsWith("[") || trimmed.startsWith("{")) && trimmed.length > 8) {
+      const inner = parseJson(trimmed);
+      if (inner !== null && typeof inner === "object") {
+        collectJsonValues(inner, values, role);
+        return;
       }
+    }
+    values.texts.push(trimmed);
+    if (role !== null) {
+      values.roleTexts.set(role, appendText(values.roleTexts.get(role), trimmed));
     }
     return;
   }
