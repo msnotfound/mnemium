@@ -15,10 +15,17 @@ export default defineConfig({
   manifest: {
     name: "Mnemium",
     description: "Local-first, on-device memory for your AI chats.",
-    // MV3 default CSP rejects WebAssembly.instantiate(); 'wasm-unsafe-eval' is the
-    // documented opt-in for sqlite-wasm, WebLLM, and transformers.js.
+    // MV3 strictly forbids remote scripts in script-src — only 'self' and
+    // 'wasm-unsafe-eval' are accepted. connect-src CAN allow remote hosts
+    // (fetch / XHR / WebSocket), so model BINARIES can come from HF/jsdelivr,
+    // but JS modules (including transformers.js's dynamic-imported ONNX ESM)
+    // must be bundled into the extension itself.
     content_security_policy: {
-      extension_pages: "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';",
+      extension_pages: [
+        "script-src 'self' 'wasm-unsafe-eval';",
+        "connect-src 'self' https://huggingface.co https://*.huggingface.co https://cdn.jsdelivr.net;",
+        "object-src 'self';",
+      ].join(" "),
     },
     permissions: ["storage", "unlimitedStorage", "offscreen", "scripting", "sidePanel"],
     host_permissions: [

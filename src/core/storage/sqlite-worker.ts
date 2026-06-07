@@ -63,10 +63,6 @@ interface Sqlite3 {
   }): Promise<unknown>;
 }
 
-interface SqliteVecLoader {
-  load(db: WasmDatabaseLike): void | Promise<void>;
-}
-
 let dbInstance: WasmDatabaseLike | null = null;
 let opening: Promise<void> | null = null;
 
@@ -81,27 +77,9 @@ async function openDb(filename: string): Promise<void> {
     }
     await sqlite3.installOpfsSAHPoolVfs({ name: "opfs-sahpool", initialCapacity: 8 });
     dbInstance = new sqlite3.oo1.DB(filename, "ct", "opfs-sahpool");
-    // sqlite-vec ships a native-only loader (node + better-sqlite3). The browser
-    // worker has no way to register the extension yet, so we tolerate the failure
-    // and run in FTS5-only mode. Vector index callers must already handle a
-    // missing vec0 (the retriever falls back to memories.search).
-    try {
-      const vecMod = (await import("sqlite-vec")) as unknown as Partial<SqliteVecLoader> & {
-        default?: Partial<SqliteVecLoader>;
-      };
-      const loader: Partial<SqliteVecLoader> | undefined =
-        vecMod.load !== undefined ? vecMod : vecMod.default;
-      if (loader?.load === undefined) {
-        throw new Error("sqlite-vec did not expose a load(db) function");
-      }
-      await loader.load(dbInstance);
-      console.info("[mnemium/sqlite-worker] sqlite-vec loaded");
-    } catch (error) {
-      console.warn(
-        "[mnemium/sqlite-worker] sqlite-vec unavailable, vector search disabled",
-        error,
-      );
-    }
+    // Vector search lives in EdgeVec (browser-native HNSW + IndexedDB) — see
+    // src/core/vector-index-edgevec.ts. The Node code path still uses
+    // sqlite-vec via better-sqlite3 (tests rely on this).
   })().finally(() => {
     opening = null;
   });

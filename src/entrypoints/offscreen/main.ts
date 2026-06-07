@@ -7,7 +7,7 @@ import { openOpfs } from "@core/storage/db";
 import type { Database } from "@core/storage/db";
 import { createDocumentRepo, createLedgerRepo, createMemoryRepo } from "@core/storage/repos";
 import { createEmbedder } from "@core/embedder";
-import { createVectorIndex } from "@core/vector-index";
+import { createEdgeVecVectorIndex, createIndexedDbMapStore } from "@core/vector-index-edgevec";
 import { createHybridRetriever } from "@core/retrieval";
 import type { HybridRetriever } from "@core/retrieval";
 import { createMemoryModel } from "@core/memory-model";
@@ -103,7 +103,7 @@ async function bootEngine(): Promise<RuntimeEngine> {
   const config = await readConfig();
   const db = await openOpfs();
   const embedder = createEmbedder();
-  const vectorIndex = createVectorIndex(db);
+  const vectorIndex = createEdgeVecVectorIndex(createIndexedDbMapStore());
   const documentRepo = createDocumentRepo(db);
   const memories = createMemoryRepo(db);
   const ledger = createLedgerRepo(db);
@@ -115,6 +115,7 @@ async function bootEngine(): Promise<RuntimeEngine> {
     embedder,
     vectorIndex,
     memoryModel,
+    useEmbedder: false, // v0.1: FTS-only retrieval; embedder vendoring is a follow-up.
     onError: (error) => {
       console.error("[mnemium] capture pipeline error", error);
     },
@@ -229,21 +230,25 @@ async function retrieveChunks(
   scopePrefix: string,
   k: number,
 ): Promise<SurfacedChunk[]> {
-  try {
-    return await runtime.retriever.hybridSearch(query, {
-      scopePrefix,
-      k,
-    });
-  } catch {
-    const memories = await runtime.memories.search(query, { scopePrefix, k });
-    return memories.map((memory) => ({
-      memoryId: memory.id,
-      content: memory.content,
-      type: memory.type,
-      sourceLabel: "Memory",
-      score: memory.confidence,
-    }));
-  }
+  // v0.1: skip the hybrid (vector + FTS) retriever and go straight to FTS5
+  // over the memory table. Vector path returns to handleRetrieve once the
+  // embedder is vendored locally.
+  const memories = await runtime.memories.search(query, { scopePrefix, k });
+  return memories.map((memory) => ({
+    memoryId: memory.id,
+    content: memory.content,
+    type: memory.type,
+    sourceLabel: sourceLabelFor(memory.scopeUri, memory.createdAt),
+    score: memory.confidence,
+  }));
+}
+
+function sourceLabelFor(scopeUri: string, createdAt: number): string {
+  const provider = scopeUri.split("::")[1] ?? "local";
+  const capitalized = `${provider[0]?.toUpperCase() ?? "L"}${provider.slice(1)}`;
+  const days = Math.max(0, Math.round((Date.now() - createdAt) / 86400000));
+  const age = days === 0 ? "today" : days === 1 ? "1d" : days < 7 ? `${days}d` : `${Math.round(days / 7)}w`;
+  return `${capitalized} · ${age}`;
 }
 
 async function persistExchange(runtime: Database, exchange: Exchange): Promise<void> {

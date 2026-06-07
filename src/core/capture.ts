@@ -12,6 +12,10 @@ export interface CapturePipelineDeps {
   embedder: Embedder;
   vectorIndex: VectorIndex;
   memoryModel: MemoryModel;
+  /** When false, distillation writes memory rows but skips embedding +
+   *  vector index. Browser builds set this to false until the embedder is
+   *  vendored locally. Node tests pass true (sqlite-vec works in Node). */
+  useEmbedder?: boolean;
   onEdges?(edges: Edge[]): Promise<void> | void;
   onError?(error: unknown): void;
   now?(): number;
@@ -41,14 +45,21 @@ export class CapturePipeline {
       return;
     }
 
-    const existing = await this.deps.memories.byScope(document.scopeUri, { limit: 50 });
-    const vectors = await this.deps.embedder.embed(memories.map((memory) => memory.content));
     const primaryChunk = chunks[0];
+    const existing = await this.deps.memories.byScope(document.scopeUri, { limit: 50 });
+
+    // v0.1: embedder + vector index disabled (MV3 CSP forbids transformers.js's
+    // remote ESM load). Memories are written by content only; retrieval falls
+    // back to FTS5. The embed/upsert path is restored when the embedder is
+    // vendored locally — see Extension-Architecture-Analysis-for-Vector-Load.md.
+    const useEmbedder = this.deps.useEmbedder ?? false;
+    const vectors = useEmbedder
+      ? await this.deps.embedder.embed(memories.map((memory) => memory.content))
+      : memories.map(() => new Float32Array());
 
     for (let i = 0; i < memories.length; i += 1) {
       const memory = memories[i];
-      const vector = vectors[i];
-      if (memory === undefined || vector === undefined || primaryChunk === undefined) {
+      if (memory === undefined || primaryChunk === undefined) {
         continue;
       }
       await this.deps.memories.upsert(memory);
@@ -58,7 +69,12 @@ export class CapturePipeline {
         documentId: document.id,
         relevance: 1,
       });
-      await this.deps.vectorIndex.upsert(this.deps.embedder.id, [{ id: memory.id, vec: vector }]);
+      if (useEmbedder) {
+        const vector = vectors[i];
+        if (vector !== undefined && vector.length > 0) {
+          await this.deps.vectorIndex.upsert(this.deps.embedder.id, [{ id: memory.id, vec: vector }]);
+        }
+      }
     }
 
     const eager = computeEagerEdges({

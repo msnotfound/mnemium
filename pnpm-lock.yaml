@@ -17,6 +17,9 @@ importers:
       '@sqlite.org/sqlite-wasm':
         specifier: 3.53.0-build1
         version: 3.53.0-build1
+      edgevec:
+        specifier: ^0.9.0
+        version: 0.9.0
       preact:
         specifier: ^10.29.2
         version: 10.29.2
@@ -1389,6 +1392,9 @@ packages:
 
   ecdsa-sig-formatter@1.0.11:
     resolution: {integrity: sha512-nagl3RYrbNv6kQkeJIpt6NJZy8twLB/2vtz6yN9Z4vRKHN4/QZJIEbqohALSgwKdnksuY3k5Addp5lg8sVoVcQ==}
+
+  edgevec@0.9.0:
+    resolution: {integrity: sha512-Pwc4QcLUpvdWwG3hOoWhA99Co3adALQxSc8wrYEYNJoax5uy1Mx9dvT8kH2HPWToBXmV6YxaGYPUVM+uGF7v7w==}
 
   electron-to-chromium@1.5.368:
     resolution: {integrity: sha512-7RckJJK4uESJF9PxvfMWd3TGqIiieUTG4HxnKaKuIpGbcr+r2ZEB3g2gAhCP3Fqm42vJSzLfgab9eva/C4/XVw==}
@@ -3922,6 +3928,8 @@ snapshots:
   ecdsa-sig-formatter@1.0.11:
     dependencies:
       safe-buffer: 5.2.1
+
+  edgevec@0.9.0: {}
 
   electron-to-chromium@1.5.368: {}
 

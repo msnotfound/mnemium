@@ -67,10 +67,10 @@ async function loadExtractor(): Promise<FeatureExtractor> {
 }
 
 async function importTransformers(): Promise<TransformersModule> {
-  const dynamicImport = new Function("specifier", "return import(specifier)") as (
-    specifier: string,
-  ) => Promise<unknown>;
-  return (await dynamicImport("@huggingface/transformers")) as TransformersModule;
+  // @huggingface/transformers is a bundled dep; static dynamic-import works
+  // under MV3 CSP, whereas `new Function("return import(...)")` does not.
+  const mod = (await import("@huggingface/transformers")) as unknown as TransformersModule;
+  return mod;
 }
 
 function tensorToVectors(tensor: FeatureExtractionTensor, count: number, dim: number): Float32Array[] {
