@@ -23,7 +23,13 @@ export type Rpc =
   // settings
   | { t: "settings.get" }
   | { t: "settings.result"; reqId: string; config: Config }
-  | { t: "settings.update"; patch: Partial<Config> };
+  | { t: "settings.update"; patch: Partial<Config> }
+  // daemon (mnemiumd helper) — uses the running config's daemon.{port,token}.
+  // Each call constructs a fresh DaemonClient so user pairing takes effect
+  // without an engine restart. See docs/MNEMIUMD-PROTOCOL.md.
+  | { t: "daemon.status" }
+  | { t: "daemon.modelDownload"; name: string }
+  | { t: "daemon.modelProgress" };
 
 /** Envelope every message is wrapped in for request/response correlation. */
 export interface RpcEnvelope {

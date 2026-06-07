@@ -49,16 +49,6 @@ export function SettingsApp(): ReactElement {
     void updateSettings(nextPatch);
   }
 
-  function setModel(kind: Config["memoryModel"]["kind"]): void {
-    const memoryModel: Config["memoryModel"] =
-      kind === "bundled"
-        ? { kind, model: "Qwen2.5-1.5B-Instruct-q4f16_1-MLC" }
-        : kind === "localServer"
-          ? { kind, endpoint: "http://localhost:11434", model: "llama3.2" }
-          : { kind, provider: "openrouter", apiKey: "", model: "openrouter/auto" };
-    patch({ memoryModel });
-  }
-
   function setSite(provider: Provider, enabled: boolean): void {
     patch({ sites: { ...config.sites, [provider]: enabled } });
   }
@@ -87,7 +77,7 @@ export function SettingsApp(): ReactElement {
       </aside>
       <main className="mnem-settings-main">
         {!loaded ? <p className="mnem-settings-loading">Loading…</p> : null}
-        {activeTab === "memory" ? <MemoryTab config={config} setModel={setModel} patch={patch} /> : null}
+        {activeTab === "memory" ? <MemoryTab config={config} patch={patch} /> : null}
         {activeTab === "connections" ? <ConnectionsTab config={config} setSite={setSite} /> : null}
         {activeTab === "privacy" ? <PrivacyTab /> : null}
         {activeTab === "system" ? <SystemTab config={config} patch={patch} /> : null}
@@ -98,52 +88,26 @@ export function SettingsApp(): ReactElement {
 
 interface MemoryTabProps {
   config: Config;
-  setModel: (kind: Config["memoryModel"]["kind"]) => void;
   patch: (next: Partial<Config>) => void;
 }
 
-function MemoryTab({ config, setModel, patch }: MemoryTabProps): ReactElement {
+function MemoryTab({ config, patch }: MemoryTabProps): ReactElement {
   return (
     <TabPanel
       title="Memory"
-      subtitle="Engine, embeddings, and how relevant context surfaces while you type."
+      subtitle="Compute backends, embeddings, and how relevant context surfaces while you type."
     >
       <section className="mnem-setting-card">
         <div className="mnem-card-heading">
           <div>
             <h3>Compute Engine</h3>
-            <p>Select the primary language model powering intelligence.</p>
+            <p>
+              Backend selection (mnemiumd / Ollama / API key / disabled) is moving to a
+              full picker in the next iteration. Current routing:{" "}
+              <code className="mnem-mono">{config.backends.distill.kind}</code>.
+            </p>
           </div>
-          <span>Active</span>
         </div>
-        <div className="mnem-segmented">
-          <button className={config.memoryModel.kind === "bundled" ? "is-active" : ""} onClick={() => setModel("bundled")} type="button">
-            <i /> Built-in <small>(on-device)</small>
-          </button>
-          <button className={config.memoryModel.kind === "localServer" ? "is-active" : ""} onClick={() => setModel("localServer")} type="button">
-            Local server <small>(Ollama)</small>
-          </button>
-          <button className={config.memoryModel.kind === "apiKey" ? "is-active" : ""} onClick={() => setModel("apiKey")} type="button">
-            BYO-key
-          </button>
-        </div>
-        <p className="mnem-note">Runs fully offline in built-in mode. Downloaded once and kept local.</p>
-      </section>
-      <section className="mnem-setting-card mnem-setting-row">
-        <div>
-          <h3>Embedding Space</h3>
-          <p>Determines how memories are vectorized and retrieved.</p>
-        </div>
-        <select
-          value={config.embedder.id}
-          onChange={(event) => patch({ embedder: { id: event.currentTarget.value } })}
-          aria-label="Embedding model"
-        >
-          <option value="bge-small-en-v1.5">bge-small-en</option>
-          <option value="nomic-embed-text">nomic-embed-text</option>
-          <option value="all-MiniLM-L6-v2">all-MiniLM-L6-v2</option>
-        </select>
-        <p className="mnem-warning">Changing this re-indexes your entire memory database in the background.</p>
       </section>
       <section className="mnem-setting-card">
         <div className="mnem-card-heading">

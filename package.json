@@ -14,8 +14,6 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@huggingface/transformers": "^3.0.0",
-    "@mlc-ai/web-llm": "^0.2.84",
     "@sqlite.org/sqlite-wasm": "3.53.0-build1",
     "edgevec": "^0.9.0",
     "preact": "^10.29.2",

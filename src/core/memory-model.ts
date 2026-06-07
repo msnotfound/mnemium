@@ -12,43 +12,33 @@ interface DistillJson {
   entities?: Entity[];
 }
 
-export type MemoryModelConfig = Config["memoryModel"];
+export type MemoryModelConfig = Config["backends"]["distill"];
 
 export function createMemoryModel(config: MemoryModelConfig): MemoryModelContract {
-  if (config.kind === "localServer") {
-    return new LocalServerMemoryModel(config.endpoint, config.model);
+  if (config.kind === "ollama" && config.ollama !== undefined) {
+    return new LocalServerMemoryModel(config.ollama.endpoint, config.ollama.model);
   }
-  if (config.kind === "apiKey") {
-    return new ApiKeyMemoryModel(config.provider, config.apiKey, config.model);
+  if (config.kind === "apiKey" && config.apiKey !== undefined) {
+    return new ApiKeyMemoryModel(
+      config.apiKey.provider,
+      config.apiKey.apiKey,
+      config.apiKey.model,
+    );
   }
-  return new BundledMemoryModel(config.model);
+  // "daemon" lives in core/daemon-memory-model.ts (built in task #25) and is
+  // resolved by the offscreen bootEngine, not here. "disabled" and any kind
+  // with missing required sub-config falls through to a no-op model so the
+  // capture pipeline cleanly writes zero memories instead of throwing.
+  return new DisabledMemoryModel();
 }
 
-export class BundledMemoryModel implements MemoryModelContract {
-  readonly id: string;
-  private engine?: Promise<unknown>;
-
-  constructor(private readonly model: string) {
-    this.id = `bundled:${model}`;
+export class DisabledMemoryModel implements MemoryModelContract {
+  readonly id = "disabled";
+  async distill(): Promise<{ memories: DraftMemory[]; entities: Entity[] }> {
+    return { memories: [], entities: [] };
   }
-
-  async distill(ex: Exchange): Promise<{ memories: DraftMemory[]; entities: Entity[] }> {
-    try {
-      const engine = await this.loadEngine();
-      const text = await runWebLlmChat(engine, distillMessages(ex));
-      return parseDistillation(text, ex);
-    } catch {
-      return heuristicDistill(ex);
-    }
-  }
-
-  async classifyRelations(_m: Memory, _candidates: Memory[]): Promise<Edge[]> {
+  async classifyRelations(): Promise<Edge[]> {
     return [];
-  }
-
-  private async loadEngine(): Promise<unknown> {
-    this.engine ??= loadWebLlmEngine(this.model);
-    return this.engine;
   }
 }
 
@@ -159,28 +149,6 @@ function distillMessages(ex: Exchange): ChatMessage[] {
       content: `User: ${ex.userText}\nAssistant: ${ex.assistantText}`,
     },
   ];
-}
-
-async function loadWebLlmEngine(model: string): Promise<unknown> {
-  const dynamicImport = new Function("specifier", "return import(specifier)") as (
-    specifier: string,
-  ) => Promise<unknown>;
-  const webllm = (await dynamicImport("@mlc-ai/web-llm")) as {
-    CreateMLCEngine?: (model: string) => Promise<unknown>;
-  };
-  if (webllm.CreateMLCEngine === undefined) {
-    throw new Error("@mlc-ai/web-llm did not expose CreateMLCEngine");
-  }
-  return webllm.CreateMLCEngine(model);
-}
-
-async function runWebLlmChat(engine: unknown, messages: ChatMessage[]): Promise<string> {
-  const chat = engine as {
-    chat?: { completions?: { create(input: { messages: ChatMessage[] }): Promise<unknown> } };
-  };
-  const result = await chat.chat?.completions?.create({ messages });
-  const choice = (result as { choices?: Array<{ message?: { content?: string } }> }).choices?.[0];
-  return choice?.message?.content ?? "";
 }
 
 async function callApiProvider(

@@ -6,12 +6,15 @@ import type { Rpc, RpcEnvelope, RpcResponse } from "@shared/rpc";
 import { openOpfs } from "@core/storage/db";
 import type { Database } from "@core/storage/db";
 import { createDocumentRepo, createLedgerRepo, createMemoryRepo } from "@core/storage/repos";
-import { createEmbedder } from "@core/embedder";
 import { createEdgeVecVectorIndex, createIndexedDbMapStore } from "@core/vector-index-edgevec";
 import { createHybridRetriever } from "@core/retrieval";
 import type { HybridRetriever } from "@core/retrieval";
-import { createMemoryModel } from "@core/memory-model";
+import { createMemoryModel, DisabledMemoryModel } from "@core/memory-model";
 import { createCapturePipeline, type CapturePipeline } from "@core/capture";
+import { DaemonClient, type DaemonStatus } from "@core/daemon-client";
+import { DaemonMemoryModel } from "@core/memory-model-daemon";
+import { DaemonEmbedder } from "@core/embedder-daemon";
+import { DaemonVectorIndex } from "@core/vector-index-daemon";
 import { serve } from "@/runtime/rpc";
 
 interface RuntimeEngine {
@@ -78,9 +81,63 @@ serve(
     "ui.search": async (msg) => handleUiSearch(msg),
     "ui.delete": async (msg) => handleUiDelete(msg),
     "ui.export": async (msg, envelope) => handleUiExport(msg, envelope),
+    "daemon.status": async () => handleDaemonStatus(),
+    "daemon.modelDownload": async (msg) => handleDaemonModelDownload(msg),
+    "daemon.modelProgress": async () => handleDaemonModelProgress(),
   },
   { target: "mnemium-offscreen" },
 );
+
+async function freshDaemonClient(): Promise<DaemonClient | null> {
+  const config = await readConfig();
+  return DaemonClient.fromConfig(config);
+}
+
+async function handleDaemonStatus(): Promise<{ paired: boolean; reachable: boolean; status: DaemonStatus | null; error?: string }> {
+  const client = await freshDaemonClient();
+  if (client === null) {
+    return { paired: false, reachable: false, status: null };
+  }
+  try {
+    const status = await client.status();
+    return { paired: true, reachable: true, status };
+  } catch (error) {
+    return {
+      paired: true,
+      reachable: false,
+      status: null,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+async function handleDaemonModelDownload(
+  msg: Extract<Rpc, { t: "daemon.modelDownload" }>,
+): Promise<{ ok: boolean; name?: string; size_bytes?: number; sha256?: string; error?: string }> {
+  const client = await freshDaemonClient();
+  if (client === null) {
+    return { ok: false, error: "daemon not paired" };
+  }
+  try {
+    const result = await client.modelDownload(msg.name);
+    return { ok: true, ...result };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+async function handleDaemonModelProgress(): Promise<{ ok: boolean; downloads: Array<{ name: string; bytes_done: number; bytes_total: number; rate_bps: number; eta_seconds: number }>; error?: string }> {
+  const client = await freshDaemonClient();
+  if (client === null) {
+    return { ok: false, downloads: [], error: "daemon not paired" };
+  }
+  try {
+    const result = await client.modelProgress();
+    return { ok: true, downloads: result.downloads };
+  } catch (error) {
+    return { ok: false, downloads: [], error: error instanceof Error ? error.message : String(error) };
+  }
+}
 
 // Pre-warm the engine so OPFS + schema init happens once, visibly, instead of
 // silently on first RPC. Errors here surface in DevTools immediately.
@@ -102,20 +159,42 @@ async function engine(): Promise<RuntimeEngine> {
 async function bootEngine(): Promise<RuntimeEngine> {
   const config = await readConfig();
   const db = await openOpfs();
-  const embedder = createEmbedder();
-  const vectorIndex = createEdgeVecVectorIndex(createIndexedDbMapStore());
   const documentRepo = createDocumentRepo(db);
   const memories = createMemoryRepo(db);
   const ledger = createLedgerRepo(db);
+
+  const daemon = DaemonClient.fromConfig(config);
+  const daemonStatus = daemon ? await daemon.status().catch((error: unknown) => {
+    console.warn("[mnemium/off] daemon status probe failed", error);
+    return null;
+  }) : null;
+  if (daemonStatus !== null) {
+    console.info(
+      "[mnemium/off] daemon paired:",
+      daemonStatus.service,
+      daemonStatus.version,
+      JSON.stringify(daemonStatus.backends),
+    );
+  } else if (daemon !== null) {
+    console.info("[mnemium/off] daemon configured but not reachable");
+  } else {
+    console.info("[mnemium/off] no daemon paired; capture-only mode");
+  }
+
+  const embedder = resolveEmbedder(config, daemon, daemonStatus);
+  const vectorIndex = resolveVectorIndex(config, daemon);
+  const memoryModel = resolveMemoryModel(config, daemon, daemonStatus);
+
   const retriever = createHybridRetriever(db, vectorIndex, embedder);
-  const memoryModel = createMemoryModel(config.memoryModel);
+  const useEmbedder = embedder.dim > 0;
+
   const capturePipeline = createCapturePipeline({
     documents: documentRepo,
     memories,
     embedder,
     vectorIndex,
     memoryModel,
-    useEmbedder: false, // v0.1: FTS-only retrieval; embedder vendoring is a follow-up.
+    useEmbedder,
     onError: (error) => {
       console.error("[mnemium] capture pipeline error", error);
     },
@@ -132,6 +211,74 @@ async function bootEngine(): Promise<RuntimeEngine> {
     capturePipeline,
   };
 }
+
+function resolveMemoryModel(
+  config: Config,
+  daemon: DaemonClient | null,
+  status: DaemonStatus | null,
+): MemoryModel {
+  const distill = config.backends.distill;
+  if (distill.kind === "daemon" && daemon !== null && status?.backends.distill.ready === true) {
+    return new DaemonMemoryModel(daemon, status.backends.distill.model ?? "daemon");
+  }
+  // ollama / apiKey / disabled (and daemon-unavailable) handled by createMemoryModel.
+  return createMemoryModel(distill);
+}
+
+function resolveEmbedder(
+  config: Config,
+  daemon: DaemonClient | null,
+  status: DaemonStatus | null,
+): Embedder {
+  const embed = config.backends.embed;
+  if (
+    embed.kind === "daemon" &&
+    daemon !== null &&
+    status?.backends.embed.ready === true &&
+    typeof status.backends.embed.dim === "number"
+  ) {
+    return new DaemonEmbedder(
+      daemon,
+      status.backends.embed.model ?? "daemon",
+      status.backends.embed.dim,
+    );
+  }
+  // ollama / apiKey embedders are TODO; for now fall back to disabled.
+  return disabledEmbedder;
+}
+
+function resolveVectorIndex(config: Config, daemon: DaemonClient | null): VectorIndex {
+  const vec = config.backends.vec;
+  if (vec.kind === "daemon" && daemon !== null) {
+    return new DaemonVectorIndex(daemon);
+  }
+  if (vec.kind === "edgevec") {
+    return createEdgeVecVectorIndex(createIndexedDbMapStore());
+  }
+  return disabledVectorIndex;
+}
+
+const disabledEmbedder: Embedder = {
+  id: "disabled",
+  dim: 0,
+  async embed() {
+    return [];
+  },
+};
+
+const disabledVectorIndex: VectorIndex = {
+  async upsert() {
+    /* no-op */
+  },
+  async search() {
+    return [];
+  },
+  async drop() {
+    /* no-op */
+  },
+};
+
+void DisabledMemoryModel; // referenced symbol kept reachable for future direct use
 
 async function handleCaptureExchange(msg: Extract<Rpc, { t: "capture.exchange" }>): Promise<{ captured: true }> {
   const runtime = await engine();
@@ -259,9 +406,16 @@ async function retrieveChunks(
   scopePrefix: string,
   k: number,
 ): Promise<SurfacedChunk[]> {
-  // v0.1: skip the hybrid (vector + FTS) retriever and go straight to FTS5
-  // over the memory table. Vector path returns to handleRetrieve once the
-  // embedder is vendored locally.
+  // Hybrid path when both embedder and vector index are real (daemon paired).
+  // Falls through to FTS5 on any failure so the loop stays usable.
+  if (runtime.embedder.dim > 0) {
+    try {
+      const hits = await runtime.retriever.hybridSearch(query, { scopePrefix, k });
+      if (hits.length > 0) return hits;
+    } catch (error) {
+      console.warn("[mnemium/off] hybrid search failed; falling back to FTS", error);
+    }
+  }
   const memories = await runtime.memories.search(query, { scopePrefix, k });
   return memories.map((memory) => ({
     memoryId: memory.id,

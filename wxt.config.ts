@@ -15,15 +15,15 @@ export default defineConfig({
   manifest: {
     name: "Mnemium",
     description: "Local-first, on-device memory for your AI chats.",
-    // MV3 strictly forbids remote scripts in script-src — only 'self' and
-    // 'wasm-unsafe-eval' are accepted. connect-src CAN allow remote hosts
-    // (fetch / XHR / WebSocket), so model BINARIES can come from HF/jsdelivr,
-    // but JS modules (including transformers.js's dynamic-imported ONNX ESM)
-    // must be bundled into the extension itself.
+    // MV3: only 'self' + 'wasm-unsafe-eval' in script-src; remote hosts in
+    // connect-src OK for fetches. The hybrid extension only talks to the
+    // local mnemiumd helper over loopback, so connect-src is tight.
+    // API-key backends (OpenAI/Anthropic/OpenRouter) live behind the daemon
+    // so the extension never opens an external connection itself.
     content_security_policy: {
       extension_pages: [
         "script-src 'self' 'wasm-unsafe-eval';",
-        "connect-src 'self' https://huggingface.co https://*.huggingface.co https://cdn.jsdelivr.net;",
+        "connect-src 'self' http://127.0.0.1:* http://localhost:*;",
         "object-src 'self';",
       ].join(" "),
     },

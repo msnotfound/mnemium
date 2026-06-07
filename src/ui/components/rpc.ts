@@ -50,6 +50,75 @@ export async function updateSettings(patch: Partial<Config>): Promise<void> {
   await sendRpc({ t: "settings.update", patch });
 }
 
+export interface DaemonStatusEnvelope {
+  paired: boolean;
+  reachable: boolean;
+  status: {
+    ok: boolean;
+    service: string;
+    version: string;
+    backends: {
+      distill: { kind: string; model?: string; ready: boolean };
+      embed: { kind: string; model?: string; ready: boolean; dim?: number };
+      vec: { kind: string; count?: number };
+    };
+    models: { available: string[]; downloading: string[] };
+  } | null;
+  error?: string;
+}
+
+export async function getDaemonStatus(): Promise<DaemonStatusEnvelope> {
+  const result = await sendRpc<DaemonStatusEnvelope>({ t: "daemon.status" });
+  return result ?? { paired: false, reachable: false, status: null };
+}
+
+export interface DaemonModelDownloadResult {
+  ok: boolean;
+  name?: string;
+  size_bytes?: number;
+  sha256?: string;
+  error?: string;
+}
+
+export async function startModelDownload(name: string): Promise<DaemonModelDownloadResult> {
+  const result = await sendRpc<DaemonModelDownloadResult>({ t: "daemon.modelDownload", name });
+  return result ?? { ok: false, error: "no response" };
+}
+
+export interface DaemonProgressEntry {
+  name: string;
+  bytes_done: number;
+  bytes_total: number;
+  rate_bps: number;
+  eta_seconds: number;
+}
+
+export interface DaemonProgressEnvelope {
+  ok: boolean;
+  downloads: DaemonProgressEntry[];
+  error?: string;
+}
+
+export async function getModelProgress(): Promise<DaemonProgressEnvelope> {
+  const result = await sendRpc<DaemonProgressEnvelope>({ t: "daemon.modelProgress" });
+  return result ?? { ok: false, downloads: [] };
+}
+
+/** Parses a pairing string of the form `mn:<port>:<token>` (printed by
+ *  `mnemiumd serve` on first boot). Returns null if the string isn't valid.
+ *  Callers pass the result through `updateSettings({ daemon: { port, token } })`. */
+export function parsePairingString(input: string): { port: number; token: string } | null {
+  const trimmed = input.trim();
+  if (!trimmed.startsWith("mn:")) return null;
+  const parts = trimmed.split(":");
+  if (parts.length < 3) return null;
+  const port = Number.parseInt(parts[1] ?? "", 10);
+  const token = parts.slice(2).join(":");
+  if (!Number.isFinite(port) || port < 1 || port > 65535) return null;
+  if (token.length === 0) return null;
+  return { port, token };
+}
+
 export async function acceptChunk(chunk: SurfacedChunk, context: InjectionContext): Promise<void> {
   await sendRpc({
     t: "inject.feedback",
