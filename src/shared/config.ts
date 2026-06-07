@@ -24,6 +24,6 @@ export const DEFAULT_CONFIG: Config = {
   embedder: { id: "bge-small-en-v1.5" },
   autoInject: { enabled: false, epsilon: 0.12, floor: 0.72, sensitivity: 0.5 },
   sites: { chatgpt: true, claude: true, gemini: true, grok: true, deepseek: true },
-  hotkey: "Ctrl+J",
+  hotkey: "Ctrl+Shift+M",
   theme: "system",
 };

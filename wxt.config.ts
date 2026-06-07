@@ -27,7 +27,7 @@ export default defineConfig({
     ],
     commands: {
       "pull-memory": {
-        suggested_key: { default: "Ctrl+J", mac: "Command+J" },
+        suggested_key: { default: "Ctrl+Shift+M", mac: "Command+Shift+M" },
         description: "Pull relevant memory into the current chat",
       },
     },
