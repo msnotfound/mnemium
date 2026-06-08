@@ -1,0 +1,78 @@
+version: 2
+
+project_name: mnemiumd
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: mnemiumd
+    main: ./cmd/mnemiumd
+    binary: mnemiumd
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+
+archives:
+  - id: default
+    name_template: >-
+      mnemiumd_{{ .Version }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+    format_overrides:
+      - goos: windows
+        format: zip
+
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
+
+snapshot:
+  name_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "Merge pull request"
+      - "Merge branch"
+
+release:
+  github:
+    owner: msnotfound
+    name: mnemium
+  prerelease: auto
+  draft: false
+  name_template: "mnemiumd v{{.Version}}"
+  header: |
+    ## mnemiumd {{.Version}}
+
+    Local helper binary for the Mnemium browser extension. See the
+    [README](https://github.com/msnotfound/mnemium/blob/main/daemon/README.md)
+    for the quickstart.
+
+  footer: |
+    ---
+    **Install:**
+    ```sh
+    curl -sSL https://github.com/msnotfound/mnemium/releases/download/v{{.Version}}/install.sh | sh
+    ```
+
+    Verify with `sha256sum` against `checksums.txt`.

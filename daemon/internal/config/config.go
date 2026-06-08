@@ -28,13 +28,13 @@ type Backends struct {
 }
 
 type BackendSpec struct {
-	Kind     string `toml:"kind"`            // "llama-cpp" | "ollama" | "openai" | "anthropic" | "openrouter" | "sqlite-vec" | "hnswlib" | "disabled"
-	Model    string `toml:"model,omitempty"` // model name (depends on kind)
-	Endpoint string `toml:"endpoint,omitempty"`
-	APIKeyEnv string `toml:"api_key_env,omitempty"`
-	Path     string `toml:"path,omitempty"` // vec backend storage
-	Threads  int    `toml:"n_threads,omitempty"`
-	Ctx      int    `toml:"ctx,omitempty"`
+	Kind      string `toml:"kind" json:"kind"` // "llama-cpp" | "ollama" | "openai" | "anthropic" | "openrouter" | "sqlite" | "sqlite-vec" | "disabled"
+	Model     string `toml:"model,omitempty" json:"model,omitempty"`
+	Endpoint  string `toml:"endpoint,omitempty" json:"endpoint,omitempty"`
+	APIKeyEnv string `toml:"api_key_env,omitempty" json:"apiKeyEnv,omitempty"`
+	Path      string `toml:"path,omitempty" json:"path,omitempty"`
+	Threads   int    `toml:"n_threads,omitempty" json:"threads,omitempty"`
+	Ctx       int    `toml:"ctx,omitempty" json:"ctx,omitempty"`
 }
 
 // Default is the shape written when no config file exists yet.

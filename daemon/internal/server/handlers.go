@@ -1,7 +1,15 @@
 package server
 
 import (
+	"context"
 	"net/http"
+	"path"
+	"strings"
+	"time"
+
+	"github.com/msnotfound/mnemium/daemon/internal/backends/distill"
+	"github.com/msnotfound/mnemium/daemon/internal/backends/vec"
+	"github.com/msnotfound/mnemium/daemon/internal/config"
 )
 
 func (s *Server) registerRoutes(mux *http.ServeMux) {
@@ -24,42 +32,77 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "GET only")
 		return
 	}
+	cfg, set := s.snapshot()
+	available, _ := s.models.Available()
+	downloading := []string{}
+	for _, snap := range s.models.Snapshots() {
+		if snap.Status == "running" {
+			downloading = append(downloading, snap.Name)
+		}
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok":      true,
 		"service": "mnemiumd",
 		"version": s.version,
 		"backends": map[string]any{
 			"distill": map[string]any{
-				"kind":  s.cfg.Backends.Distill.Kind,
-				"model": s.cfg.Backends.Distill.Model,
-				"ready": false, // v0.0: no real backend implemented yet
+				"kind":  cfg.Backends.Distill.Kind,
+				"model": set.Distill.Model(),
+				"ready": set.Distill.Ready(),
 			},
 			"embed": map[string]any{
-				"kind":  s.cfg.Backends.Embed.Kind,
-				"model": s.cfg.Backends.Embed.Model,
-				"ready": false,
-				"dim":   0,
+				"kind":  cfg.Backends.Embed.Kind,
+				"model": set.Embed.Model(),
+				"ready": set.Embed.Ready(),
+				"dim":   set.Embed.Dim(),
 			},
 			"vec": map[string]any{
-				"kind":  s.cfg.Backends.Vec.Kind,
-				"count": 0,
+				"kind":  cfg.Backends.Vec.Kind,
+				"count": set.Vec.Count(r.Context()),
+				"ready": set.Vec.Ready(),
 			},
 		},
 		"models": map[string]any{
-			"available":   []string{},
-			"downloading": []string{},
+			"available":   available,
+			"downloading": downloading,
 		},
 	})
 }
 
-// ---- compute endpoints (all stubbed) -------------------------------------
+// ---- /distill ------------------------------------------------------------
 
 func (s *Server) handleDistill(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "POST only")
 		return
 	}
-	backendUnavailable(w, "distill backend not implemented in this build (v0.0 scaffolding)")
+	_, set := s.snapshot()
+	if !set.Distill.Ready() {
+		backendUnavailable(w, "distill backend is not configured or not yet started")
+		return
+	}
+	var req distill.Exchange
+	if err := readJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "bad_request", err.Error())
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 120*time.Second)
+	defer cancel()
+	memories, entities, err := set.Distill.Distill(ctx, req)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "distill_failed", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"memories": memories,
+		"entities": entities,
+	})
+}
+
+// ---- /embed --------------------------------------------------------------
+
+type embedRequest struct {
+	Texts []string `json:"texts"`
 }
 
 func (s *Server) handleEmbed(w http.ResponseWriter, r *http.Request) {
@@ -67,7 +110,35 @@ func (s *Server) handleEmbed(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "POST only")
 		return
 	}
-	backendUnavailable(w, "embed backend not implemented in this build (v0.0 scaffolding)")
+	_, set := s.snapshot()
+	if !set.Embed.Ready() {
+		backendUnavailable(w, "embed backend is not configured")
+		return
+	}
+	var req embedRequest
+	if err := readJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "bad_request", err.Error())
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 120*time.Second)
+	defer cancel()
+	vectors, err := set.Embed.Embed(ctx, req.Texts)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "embed_failed", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"model":   set.Embed.Model(),
+		"dim":     set.Embed.Dim(),
+		"vectors": vectors,
+	})
+}
+
+// ---- /vec/* --------------------------------------------------------------
+
+type vecUpsertRequest struct {
+	ModelID string    `json:"modelId"`
+	Rows    []vec.Row `json:"rows"`
 }
 
 func (s *Server) handleVecUpsert(w http.ResponseWriter, r *http.Request) {
@@ -75,7 +146,33 @@ func (s *Server) handleVecUpsert(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "POST only")
 		return
 	}
-	backendUnavailable(w, "vec backend not implemented in this build (v0.0 scaffolding)")
+	_, set := s.snapshot()
+	if !set.Vec.Ready() {
+		backendUnavailable(w, "vec backend is not configured")
+		return
+	}
+	var req vecUpsertRequest
+	if err := readJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "bad_request", err.Error())
+		return
+	}
+	if req.ModelID == "" {
+		writeError(w, http.StatusBadRequest, "bad_request", "modelId is required")
+		return
+	}
+	n, err := set.Vec.Upsert(r.Context(), req.ModelID, req.Rows)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "vec_upsert_failed", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"upserted": n})
+}
+
+type vecSearchRequest struct {
+	ModelID string      `json:"modelId"`
+	Vec     []float32   `json:"vec"`
+	K       int         `json:"k"`
+	Filter  *vec.Filter `json:"filter,omitempty"`
 }
 
 func (s *Server) handleVecSearch(w http.ResponseWriter, r *http.Request) {
@@ -83,7 +180,29 @@ func (s *Server) handleVecSearch(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "POST only")
 		return
 	}
-	backendUnavailable(w, "vec backend not implemented in this build (v0.0 scaffolding)")
+	_, set := s.snapshot()
+	if !set.Vec.Ready() {
+		backendUnavailable(w, "vec backend is not configured")
+		return
+	}
+	var req vecSearchRequest
+	if err := readJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "bad_request", err.Error())
+		return
+	}
+	if req.K <= 0 {
+		req.K = 16
+	}
+	hits, err := set.Vec.Search(r.Context(), req.ModelID, req.Vec, req.K, req.Filter)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "vec_search_failed", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"hits": hits})
+}
+
+type vecDropRequest struct {
+	ModelID string `json:"modelId"`
 }
 
 func (s *Server) handleVecDrop(w http.ResponseWriter, r *http.Request) {
@@ -91,39 +210,117 @@ func (s *Server) handleVecDrop(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "POST only")
 		return
 	}
-	backendUnavailable(w, "vec backend not implemented in this build (v0.0 scaffolding)")
+	_, set := s.snapshot()
+	if !set.Vec.Ready() {
+		backendUnavailable(w, "vec backend is not configured")
+		return
+	}
+	var req vecDropRequest
+	if err := readJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "bad_request", err.Error())
+		return
+	}
+	if req.ModelID == "" {
+		writeError(w, http.StatusBadRequest, "bad_request", "modelId is required")
+		return
+	}
+	if err := set.Vec.Drop(r.Context(), req.ModelID); err != nil {
+		writeError(w, http.StatusInternalServerError, "vec_drop_failed", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
-// ---- /config (read/write the persisted config) ---------------------------
+// ---- /config -------------------------------------------------------------
 
 func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
+		cfg, _ := s.snapshot()
 		writeJSON(w, http.StatusOK, map[string]any{
-			"distill": s.cfg.Backends.Distill,
-			"embed":   s.cfg.Backends.Embed,
-			"vec":     s.cfg.Backends.Vec,
+			"listen":  cfg.Listen,
+			"distill": cfg.Backends.Distill,
+			"embed":   cfg.Backends.Embed,
+			"vec":     cfg.Backends.Vec,
 		})
 	case http.MethodPut:
-		// v0.0: no live reconfig. Document the path: read body, persist via
-		// config.Save, rebuild backends. Returning 501 until backends exist
-		// so callers don't think they've changed something.
-		writeError(w, http.StatusNotImplemented, "not_implemented",
-			"runtime reconfig lands once real backends ship. Edit config.toml + restart for now.")
+		var incoming struct {
+			Listen   *string                       `json:"listen,omitempty"`
+			Backends *struct {
+				Distill *config.BackendSpec `json:"distill,omitempty"`
+				Embed   *config.BackendSpec `json:"embed,omitempty"`
+				Vec     *config.BackendSpec `json:"vec,omitempty"`
+			} `json:"backends,omitempty"`
+		}
+		if err := readJSON(r, &incoming); err != nil {
+			writeError(w, http.StatusBadRequest, "bad_request", err.Error())
+			return
+		}
+		cfg, _ := s.snapshot()
+		if incoming.Listen != nil {
+			cfg.Listen = *incoming.Listen
+		}
+		if incoming.Backends != nil {
+			if incoming.Backends.Distill != nil {
+				cfg.Backends.Distill = *incoming.Backends.Distill
+			}
+			if incoming.Backends.Embed != nil {
+				cfg.Backends.Embed = *incoming.Backends.Embed
+			}
+			if incoming.Backends.Vec != nil {
+				cfg.Backends.Vec = *incoming.Backends.Vec
+			}
+		}
+		if err := config.Save(cfg); err != nil {
+			writeError(w, http.StatusInternalServerError, "config_save_failed", err.Error())
+			return
+		}
+		s.Reconfigure(cfg)
+		writeJSON(w, http.StatusOK, map[string]any{
+			"ok":      true,
+			"listen":  cfg.Listen,
+			"distill": cfg.Backends.Distill,
+			"embed":   cfg.Backends.Embed,
+			"vec":     cfg.Backends.Vec,
+			"note":    "listen changes require a daemon restart to take effect",
+		})
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "GET or PUT")
 	}
 }
 
-// ---- /model/* (download manager — also stubbed) --------------------------
+// ---- /model/* (download manager) -----------------------------------------
+
+type modelDownloadRequest struct {
+	Name   string `json:"name"`
+	URL    string `json:"url"`
+	SHA256 string `json:"sha256,omitempty"`
+}
 
 func (s *Server) handleModelDownload(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "POST only")
 		return
 	}
-	writeError(w, http.StatusNotImplemented, "not_implemented",
-		"model download manager not implemented in v0.0 scaffolding")
+	var req modelDownloadRequest
+	if err := readJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "bad_request", err.Error())
+		return
+	}
+	if req.Name == "" || req.URL == "" {
+		writeError(w, http.StatusBadRequest, "bad_request", "name and url are required")
+		return
+	}
+	if strings.ContainsAny(req.Name, "/\\") {
+		writeError(w, http.StatusBadRequest, "bad_request", "name must be a basename, no path separators")
+		return
+	}
+	snap, err := s.models.Start(r.Context(), req.Name, req.URL, req.SHA256)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "bad_request", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusAccepted, snap)
 }
 
 func (s *Server) handleModelProgress(w http.ResponseWriter, r *http.Request) {
@@ -131,20 +328,31 @@ func (s *Server) handleModelProgress(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "GET only")
 		return
 	}
-	// Return an empty array so the extension's polling loop doesn't crash
-	// while we wait for the real download manager.
 	writeJSON(w, http.StatusOK, map[string]any{
-		"downloads": []any{},
+		"downloads": s.models.Snapshots(),
 	})
 }
 
 func (s *Server) handleModelByName(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodDelete {
-		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "DELETE only")
+	name := strings.TrimPrefix(r.URL.Path, "/model/")
+	name = path.Clean(name)
+	if name == "" || name == "." || strings.ContainsAny(name, "/\\") {
+		writeError(w, http.StatusBadRequest, "bad_request", "invalid model name")
 		return
 	}
-	writeError(w, http.StatusNotImplemented, "not_implemented",
-		"model delete not implemented in v0.0 scaffolding")
+	switch r.Method {
+	case http.MethodDelete:
+		if err := s.models.Cancel(name); err != nil {
+			// non-fatal — keep going to also try the disk delete
+		}
+		if err := s.models.Delete(name); err != nil {
+			writeError(w, http.StatusInternalServerError, "model_delete_failed", err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "name": name})
+	default:
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "DELETE only")
+	}
 }
 
 // ---- error helpers -------------------------------------------------------

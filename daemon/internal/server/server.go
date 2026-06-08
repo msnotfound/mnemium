@@ -12,17 +12,25 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/msnotfound/mnemium/daemon/internal/backends"
 	"github.com/msnotfound/mnemium/daemon/internal/config"
+	"github.com/msnotfound/mnemium/daemon/internal/models"
 	"github.com/msnotfound/mnemium/daemon/internal/pairing"
+	"github.com/msnotfound/mnemium/daemon/internal/xdg"
 )
 
 // Server is the long-lived HTTP server.
 type Server struct {
+	mu       sync.RWMutex
 	cfg      config.Config
 	creds    pairing.Credentials
 	version  string
+	paths    xdg.Paths
+	backends backends.Set
+	models   *models.Manager
 
 	httpSrv  *http.Server
 	listener net.Listener
@@ -34,9 +42,40 @@ type BoundAddr struct {
 	Port int
 }
 
-// New constructs a Server. Call Listen() then Serve().
-func New(cfg config.Config, creds pairing.Credentials, version string) (*Server, error) {
-	return &Server{cfg: cfg, creds: creds, version: version}, nil
+// New constructs a Server. Call Listen() then Serve(). The resolver runs
+// here so /status reflects real backend state from the first request.
+func New(cfg config.Config, creds pairing.Credentials, version string, paths xdg.Paths) (*Server, error) {
+	mgr, err := models.NewManager(paths.Models)
+	if err != nil {
+		return nil, fmt.Errorf("models manager: %w", err)
+	}
+	return &Server{
+		cfg:      cfg,
+		creds:    creds,
+		version:  version,
+		paths:    paths,
+		backends: backends.Resolve(cfg, paths),
+		models:   mgr,
+	}, nil
+}
+
+// Reconfigure swaps backends in place after a PUT /config call. Closes
+// the old set and replaces it with a freshly-resolved one. Returns the
+// new effective config.
+func (s *Server) Reconfigure(cfg config.Config) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	old := s.backends
+	s.cfg = cfg
+	s.backends = backends.Resolve(cfg, s.paths)
+	old.Close()
+}
+
+// snapshot returns a stable copy of cfg + backends for one request.
+func (s *Server) snapshot() (config.Config, backends.Set) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.cfg, s.backends
 }
 
 // Listen binds the configured address and returns the actual port (in
@@ -72,8 +111,11 @@ func (s *Server) Serve() error {
 	return err
 }
 
-// Shutdown gracefully stops the server.
+// Shutdown gracefully stops the server and releases backend resources.
 func (s *Server) Shutdown(ctx context.Context) error {
+	s.mu.Lock()
+	s.backends.Close()
+	s.mu.Unlock()
 	if s.httpSrv == nil {
 		return nil
 	}

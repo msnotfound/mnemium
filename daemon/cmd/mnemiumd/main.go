@@ -61,7 +61,11 @@ func serveCmd() *cobra.Command {
 				cfg.Listen = "127.0.0.1:0"
 			}
 
-			srv, err := server.New(cfg, creds, version)
+			paths := config.Paths()
+			if err := paths.Ensure(); err != nil {
+				return fmt.Errorf("ensure paths: %w", err)
+			}
+			srv, err := server.New(cfg, creds, version, paths)
 			if err != nil {
 				return fmt.Errorf("init server: %w", err)
 			}
