@@ -60,7 +60,7 @@ export interface DaemonStatusEnvelope {
     backends: {
       distill: { kind: string; model?: string; ready: boolean };
       embed: { kind: string; model?: string; ready: boolean; dim?: number };
-      vec: { kind: string; count?: number };
+      vec: { kind: string; count?: number; ready?: boolean };
     };
     models: { available: string[]; downloading: string[] };
   } | null;
@@ -72,25 +72,38 @@ export async function getDaemonStatus(): Promise<DaemonStatusEnvelope> {
   return result ?? { paired: false, reachable: false, status: null };
 }
 
+/** Snapshot of one download job — matches mnemiumd's Snapshot exactly. */
+export interface DaemonProgressEntry {
+  name: string;
+  url: string;
+  total: number;
+  downloaded: number;
+  percent: number;
+  status: "running" | "done" | "failed";
+  error?: string;
+  startedAt: number;
+  finishedAt?: number;
+  bytesPerSec?: number;
+}
+
 export interface DaemonModelDownloadResult {
   ok: boolean;
-  name?: string;
-  size_bytes?: number;
-  sha256?: string;
+  entry?: DaemonProgressEntry;
   error?: string;
 }
 
-export async function startModelDownload(name: string): Promise<DaemonModelDownloadResult> {
-  const result = await sendRpc<DaemonModelDownloadResult>({ t: "daemon.modelDownload", name });
+export async function startModelDownload(
+  name: string,
+  url: string,
+  sha256?: string,
+): Promise<DaemonModelDownloadResult> {
+  const result = await sendRpc<DaemonModelDownloadResult>({
+    t: "daemon.modelDownload",
+    name,
+    url,
+    sha256,
+  });
   return result ?? { ok: false, error: "no response" };
-}
-
-export interface DaemonProgressEntry {
-  name: string;
-  bytes_done: number;
-  bytes_total: number;
-  rate_bps: number;
-  eta_seconds: number;
 }
 
 export interface DaemonProgressEnvelope {
@@ -102,6 +115,11 @@ export interface DaemonProgressEnvelope {
 export async function getModelProgress(): Promise<DaemonProgressEnvelope> {
   const result = await sendRpc<DaemonProgressEnvelope>({ t: "daemon.modelProgress" });
   return result ?? { ok: false, downloads: [] };
+}
+
+export async function deleteModel(name: string): Promise<{ ok: boolean; error?: string }> {
+  const result = await sendRpc<{ ok: boolean; error?: string }>({ t: "daemon.modelDelete", name });
+  return result ?? { ok: false, error: "no response" };
 }
 
 /** Parses a pairing string of the form `mn:<port>:<token>` (printed by

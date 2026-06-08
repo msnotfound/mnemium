@@ -1,6 +1,8 @@
 import type { ReactElement } from "react";
 import { useEffect, useMemo, useState } from "react";
 
+import { findModel, KNOWN_MODELS } from "@shared/model-registry";
+
 import { SurfaceRoot } from "../components/Primitives";
 import {
   getDaemonStatus,
@@ -31,26 +33,43 @@ interface ModelChoice {
   embedSize: string;
 }
 
+// Pull display labels and sizes off the model registry so onboarding and
+// Settings can never drift on what's actually fetchable.
+function distill(name: string): { name: string; size: string } {
+  const m = findModel(name);
+  return { name, size: m ? formatBytes(m.sizeBytes) : "?" };
+}
+
+const recommendedDistill = KNOWN_MODELS.find((m) => m.kind === "distill")?.name ?? "";
+const qualityDistill = KNOWN_MODELS.filter((m) => m.kind === "distill")[1]?.name ?? recommendedDistill;
+const recommendedEmbed = KNOWN_MODELS.find((m) => m.kind === "embed")?.name ?? "";
+
 const modelChoices: ModelChoice[] = [
   {
     id: "recommended",
     title: "Recommended",
-    summary: "Qwen2.5-1.5B + nomic-embed-text",
-    distillName: "qwen2.5-1.5b-instruct-q4_k_m",
-    distillSize: "~1.0 GB",
-    embedName: "nomic-embed-text-v1.5",
-    embedSize: "~274 MB",
+    summary: "Smallest workable models — fast distillation + good retrieval",
+    distillName: distill(recommendedDistill).name,
+    distillSize: distill(recommendedDistill).size,
+    embedName: distill(recommendedEmbed).name,
+    embedSize: distill(recommendedEmbed).size,
   },
   {
     id: "quality",
     title: "Higher quality",
-    summary: "Phi-3-mini + nomic-embed-text",
-    distillName: "phi-3-mini-q4_k_m",
-    distillSize: "~2.4 GB",
-    embedName: "nomic-embed-text-v1.5",
-    embedSize: "~274 MB",
+    summary: "Slower, denser distillation. Same embedder.",
+    distillName: distill(qualityDistill).name,
+    distillSize: distill(qualityDistill).size,
+    embedName: distill(recommendedEmbed).name,
+    embedSize: distill(recommendedEmbed).size,
   },
 ];
+
+function formatBytes(n: number): string {
+  if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)} GB`;
+  if (n >= 1_000_000) return `${Math.round(n / 1_000_000)} MB`;
+  return `${Math.round(n / 1_000)} KB`;
+}
 
 export function OnboardingApp(): ReactElement {
   const [step, setStep] = useState<OnboardingStep>(1);
@@ -128,7 +147,7 @@ export function OnboardingApp(): ReactElement {
 
       const allFinished = activeDownloads.every((name) => {
         const entry = downloads.find((download) => download.name === name);
-        return entry === undefined || (entry.bytes_total > 0 && entry.bytes_done >= entry.bytes_total);
+        return entry === undefined || entry.status === "done";
       });
 
       if (allFinished) {
@@ -187,7 +206,11 @@ export function OnboardingApp(): ReactElement {
 
     try {
       for (const name of names) {
-        const result = await startModelDownload(name);
+        const known = findModel(name);
+        if (known === undefined) {
+          throw new Error(`No URL registered for model "${name}". Add it to shared/model-registry.ts.`);
+        }
+        const result = await startModelDownload(known.name, known.url, known.sha256 || undefined);
         if (!result.ok) {
           throw new Error(result.error ?? `Could not start ${name}`);
         }
@@ -485,16 +508,26 @@ async function waitAtLeast(startedAt: number, minimumMs: number): Promise<void> 
 }
 
 function progressPercent(entry: DaemonProgressEntry | undefined): number {
-  if (entry === undefined || entry.bytes_total <= 0) return 0;
-  return Math.min(100, Math.round((entry.bytes_done / entry.bytes_total) * 100));
+  if (entry === undefined) return 0;
+  if (entry.status === "done") return 100;
+  if (entry.total <= 0) return 0;
+  return Math.min(100, Math.round((entry.downloaded / entry.total) * 100));
 }
 
 function formatProgress(entry: DaemonProgressEntry | undefined): string {
   if (entry === undefined) return "Waiting for daemon progress...";
-  return `${formatMb(entry.bytes_done)} / ${formatMb(entry.bytes_total)} · ${formatRate(entry.rate_bps)} · ETA ${Math.max(
-    0,
-    Math.round(entry.eta_seconds),
-  )}s`;
+  if (entry.status === "failed") return `Failed: ${entry.error ?? "unknown error"}`;
+  if (entry.status === "done") return `${formatMb(entry.total)} · done`;
+  const eta = etaSeconds(entry);
+  const rate = entry.bytesPerSec ?? 0;
+  return `${formatMb(entry.downloaded)} / ${formatMb(entry.total)} · ${formatRate(rate)}${eta > 0 ? ` · ETA ${eta}s` : ""}`;
+}
+
+function etaSeconds(entry: DaemonProgressEntry): number {
+  if (!entry.bytesPerSec || entry.bytesPerSec <= 0 || entry.total <= 0) return 0;
+  const remaining = entry.total - entry.downloaded;
+  if (remaining <= 0) return 0;
+  return Math.max(0, Math.round(remaining / entry.bytesPerSec));
 }
 
 function formatMb(bytes: number): string {

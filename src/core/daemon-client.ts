@@ -6,6 +6,16 @@
 
 import type { DraftMemory, Entity, Exchange, MemoryType } from "@shared/types";
 
+export interface BackendSpec {
+  kind: string;
+  model?: string;
+  endpoint?: string;
+  apiKeyEnv?: string;
+  path?: string;
+  threads?: number;
+  ctx?: number;
+}
+
 export interface DaemonStatus {
   ok: boolean;
   service: string;
@@ -13,12 +23,32 @@ export interface DaemonStatus {
   backends: {
     distill: { kind: string; model?: string; ready: boolean };
     embed: { kind: string; model?: string; ready: boolean; dim?: number };
-    vec: { kind: string; count?: number };
+    vec: { kind: string; count?: number; ready?: boolean };
   };
   models: {
     available: string[];
     downloading: string[];
   };
+}
+
+export interface DaemonConfigShape {
+  listen?: string;
+  distill: BackendSpec;
+  embed: BackendSpec;
+  vec: BackendSpec;
+}
+
+export interface ModelProgressEntry {
+  name: string;
+  url: string;
+  total: number;
+  downloaded: number;
+  percent: number;
+  status: "running" | "done" | "failed";
+  error?: string;
+  startedAt: number;
+  finishedAt?: number;
+  bytesPerSec?: number;
 }
 
 export interface DaemonCredentials {
@@ -52,7 +82,8 @@ export class DaemonClient {
   }
 
   async distill(exchange: Exchange): Promise<{ memories: DraftMemory[]; entities: Entity[] }> {
-    return this.request("POST", "/distill", { exchange }, 30000);
+    // Daemon decodes the body directly into its Exchange struct — send it flat.
+    return this.request("POST", "/distill", exchange, 30000);
   }
 
   async embed(texts: string[]): Promise<{ model: string; dim: number; vectors: number[][] }> {
@@ -79,14 +110,26 @@ export class DaemonClient {
     return this.request("POST", "/vec/drop", { modelId }, 5000);
   }
 
-  async modelDownload(name: string): Promise<{ name: string; size_bytes: number; sha256: string }> {
-    return this.request("POST", "/model/download", { name }, 5000);
+  async getConfig(): Promise<DaemonConfigShape> {
+    return this.request("GET", "/config", undefined, 2000);
   }
 
-  async modelProgress(): Promise<{
-    downloads: Array<{ name: string; bytes_done: number; bytes_total: number; rate_bps: number; eta_seconds: number }>;
-  }> {
+  async putConfig(patch: Partial<DaemonConfigShape> & { backends?: Partial<{ distill: BackendSpec; embed: BackendSpec; vec: BackendSpec }> }): Promise<DaemonConfigShape> {
+    return this.request("PUT", "/config", patch, 5000);
+  }
+
+  /** Kick off a download. Name is the basename written under daemon's
+   *  models dir; url is the HTTPS source; sha256 is optional verification. */
+  async modelDownload(name: string, url: string, sha256?: string): Promise<ModelProgressEntry> {
+    return this.request("POST", "/model/download", { name, url, sha256 }, 5000);
+  }
+
+  async modelProgress(): Promise<{ downloads: ModelProgressEntry[] }> {
     return this.request("GET", "/model/progress", undefined, 2000);
+  }
+
+  async modelDelete(name: string): Promise<{ ok: boolean; name: string }> {
+    return this.request("DELETE", `/model/${encodeURIComponent(name)}`, undefined, 5000);
   }
 
   private async request<T>(
@@ -124,6 +167,10 @@ export class DaemonClient {
           isErrorEnvelope(detail) ? detail.error.message : `daemon HTTP ${response.status}`,
           isErrorEnvelope(detail) ? detail.error.code : `http_${response.status}`,
         );
+      }
+      // 204 No Content — modelDelete style. Return an empty object cast.
+      if (response.status === 204) {
+        return {} as T;
       }
       return (await response.json()) as T;
     } catch (error) {

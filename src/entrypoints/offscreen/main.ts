@@ -11,7 +11,7 @@ import { createHybridRetriever } from "@core/retrieval";
 import type { HybridRetriever } from "@core/retrieval";
 import { createMemoryModel, DisabledMemoryModel } from "@core/memory-model";
 import { createCapturePipeline, type CapturePipeline } from "@core/capture";
-import { DaemonClient, type DaemonStatus } from "@core/daemon-client";
+import { DaemonClient, type DaemonStatus, type ModelProgressEntry } from "@core/daemon-client";
 import { DaemonMemoryModel } from "@core/memory-model-daemon";
 import { DaemonEmbedder } from "@core/embedder-daemon";
 import { DaemonVectorIndex } from "@core/vector-index-daemon";
@@ -84,6 +84,7 @@ serve(
     "daemon.status": async () => handleDaemonStatus(),
     "daemon.modelDownload": async (msg) => handleDaemonModelDownload(msg),
     "daemon.modelProgress": async () => handleDaemonModelProgress(),
+    "daemon.modelDelete": async (msg) => handleDaemonModelDelete(msg),
   },
   { target: "mnemium-offscreen" },
 );
@@ -113,20 +114,20 @@ async function handleDaemonStatus(): Promise<{ paired: boolean; reachable: boole
 
 async function handleDaemonModelDownload(
   msg: Extract<Rpc, { t: "daemon.modelDownload" }>,
-): Promise<{ ok: boolean; name?: string; size_bytes?: number; sha256?: string; error?: string }> {
+): Promise<{ ok: boolean; entry?: ModelProgressEntry; error?: string }> {
   const client = await freshDaemonClient();
   if (client === null) {
     return { ok: false, error: "daemon not paired" };
   }
   try {
-    const result = await client.modelDownload(msg.name);
-    return { ok: true, ...result };
+    const entry = await client.modelDownload(msg.name, msg.url, msg.sha256);
+    return { ok: true, entry };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };
   }
 }
 
-async function handleDaemonModelProgress(): Promise<{ ok: boolean; downloads: Array<{ name: string; bytes_done: number; bytes_total: number; rate_bps: number; eta_seconds: number }>; error?: string }> {
+async function handleDaemonModelProgress(): Promise<{ ok: boolean; downloads: ModelProgressEntry[]; error?: string }> {
   const client = await freshDaemonClient();
   if (client === null) {
     return { ok: false, downloads: [], error: "daemon not paired" };
@@ -136,6 +137,21 @@ async function handleDaemonModelProgress(): Promise<{ ok: boolean; downloads: Ar
     return { ok: true, downloads: result.downloads };
   } catch (error) {
     return { ok: false, downloads: [], error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+async function handleDaemonModelDelete(
+  msg: Extract<Rpc, { t: "daemon.modelDelete" }>,
+): Promise<{ ok: boolean; error?: string }> {
+  const client = await freshDaemonClient();
+  if (client === null) {
+    return { ok: false, error: "daemon not paired" };
+  }
+  try {
+    await client.modelDelete(msg.name);
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
   }
 }
 

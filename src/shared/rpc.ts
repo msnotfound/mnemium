@@ -28,8 +28,9 @@ export type Rpc =
   // Each call constructs a fresh DaemonClient so user pairing takes effect
   // without an engine restart. See docs/MNEMIUMD-PROTOCOL.md.
   | { t: "daemon.status" }
-  | { t: "daemon.modelDownload"; name: string }
-  | { t: "daemon.modelProgress" };
+  | { t: "daemon.modelDownload"; name: string; url: string; sha256?: string }
+  | { t: "daemon.modelProgress" }
+  | { t: "daemon.modelDelete"; name: string };
 
 /** Envelope every message is wrapped in for request/response correlation. */
 export interface RpcEnvelope {

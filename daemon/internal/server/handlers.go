@@ -170,7 +170,7 @@ func (s *Server) handleVecUpsert(w http.ResponseWriter, r *http.Request) {
 
 type vecSearchRequest struct {
 	ModelID string      `json:"modelId"`
-	Vec     []float32   `json:"vec"`
+	Query   []float32   `json:"query"`
 	K       int         `json:"k"`
 	Filter  *vec.Filter `json:"filter,omitempty"`
 }
@@ -193,7 +193,7 @@ func (s *Server) handleVecSearch(w http.ResponseWriter, r *http.Request) {
 	if req.K <= 0 {
 		req.K = 16
 	}
-	hits, err := set.Vec.Search(r.Context(), req.ModelID, req.Vec, req.K, req.Filter)
+	hits, err := set.Vec.Search(r.Context(), req.ModelID, req.Query, req.K, req.Filter)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "vec_search_failed", err.Error())
 		return
@@ -228,7 +228,7 @@ func (s *Server) handleVecDrop(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "vec_drop_failed", err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+	writeJSON(w, http.StatusOK, map[string]any{"dropped": true})
 }
 
 // ---- /config -------------------------------------------------------------
