@@ -15,6 +15,13 @@
 
 $ErrorActionPreference = "Stop"
 
+# Windows PowerShell 5.1 (the system default on Win10/11) defaults to TLS 1.0
+# for outbound HTTPS, which GitHub rejects at the SSL handshake — Invoke-
+# RestMethod/Invoke-WebRequest blow up with "connection was closed
+# unexpectedly". Force TLS 1.2 (and keep whatever else is enabled).
+[Net.ServicePointManager]::SecurityProtocol =
+    [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+
 $Repo       = "msnotfound/mnemium"
 $BinName    = "mnemiumd.exe"
 $DefaultDir = Join-Path $env:LOCALAPPDATA "Mnemium\bin"
