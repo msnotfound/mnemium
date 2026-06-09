@@ -27,25 +27,22 @@ second brain. Capture what you discuss → distill it into typed memories
 
 **Windows** (any PowerShell, including 5.1):
 ```powershell
-curl.exe -fsSL https://github.com/msnotfound/mnemium/releases/latest/download/install.ps1 | iex
+irm https://raw.githubusercontent.com/msnotfound/mnemium/main/scripts/install.ps1 | iex
 ```
 
-> `curl.exe` ships with Windows 10 (1803+) and Windows 11. We use it instead of PowerShell's `Invoke-RestMethod` because `irm` on Windows PowerShell 5.1 (the system default) inherits .NET's TLS defaults — older Win10 boxes negotiate TLS 1.0 outbound and GitHub rejects the handshake. `curl.exe` brings its own TLS stack (Schannel) and Just Works.
->
-> *If you prefer `irm`, set the protocol first:*
+> If `irm` errors out with *"The connection was closed unexpectedly"* (Windows PowerShell 5.1 on some boxes with strict AV/proxies), use the built-in `curl.exe` instead — it has its own TLS stack and works everywhere:
 > ```powershell
-> [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-> irm https://github.com/msnotfound/mnemium/releases/latest/download/install.ps1 | iex
+> curl.exe -fsSL https://raw.githubusercontent.com/msnotfound/mnemium/main/scripts/install.ps1 | iex
 > ```
-> *(Still fails on boxes where corporate AV or proxies break .NET HTTPS.)*
 
 **macOS / Linux**:
 ```bash
-curl -fsSL https://github.com/msnotfound/mnemium/releases/latest/download/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/msnotfound/mnemium/main/scripts/install.sh | sh
 ```
 
-Both installers fetch the matching binary for your OS/arch from the latest
-GitHub release, verify the sha256, and drop it on your `PATH`.
+Both scripts query GitHub's API for the latest release tag, fetch the
+matching binary for your OS/arch, verify the SHA-256, and drop it on
+your `PATH`.
 
 ### 2 — Start the daemon
 
