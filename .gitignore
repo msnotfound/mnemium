@@ -5,11 +5,27 @@ node_modules/
 dist/
 *.tsbuildinfo
 
+# daemon build
+daemon/bin/
+daemon/dist/
+
+# release artifacts
+release-artifacts/
+*.tar.gz
+*.zip
+
 # local data / models
 *.sqlite
 models/*.bin
 models/*.onnx
 *.wasm.cache
+
+# user-exported data (contains real chat content — never commit)
+mnemium-export-*.json
+
+# claude code session artifacts
+.claude/
+*-local-command-caveatcaveat*.txt
 
 # research artifacts (kept locally, not in repo)
 research/*.txt
