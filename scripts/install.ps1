@@ -80,13 +80,23 @@ try {
     if ($sumsAsset) {
         Invoke-WebRequest -UseBasicParsing -Uri $sumsAsset.browser_download_url -OutFile $sumsPath
         Write-Step "Verifying SHA-256"
-        $expected = (Select-String -Path $sumsPath -Pattern ([Regex]::Escape($zipAsset.name)) | Select-Object -First 1) -replace '\s.*$'
+        # checksums.txt lines are "<hex>  <filename>". Parse line-by-line
+        # so we get just the hash field, not Select-String's MatchInfo
+        # stringification (which prepends "<file>:<lineno>:").
+        $expected = $null
+        foreach ($line in (Get-Content $sumsPath)) {
+            $fields = $line.Trim() -split '\s+'
+            if ($fields.Count -ge 2 -and $fields[1] -eq $zipAsset.name) {
+                $expected = $fields[0].ToLower()
+                break
+            }
+        }
         if (-not $expected) {
             Write-Err "checksums.txt has no entry for $($zipAsset.name) — refusing to install."
             exit 1
         }
         $actual = (Get-FileHash -Algorithm SHA256 $zipPath).Hash.ToLower()
-        if ($actual -ne $expected.ToLower()) {
+        if ($actual -ne $expected) {
             Write-Err "SHA-256 mismatch! expected $expected, got $actual"
             exit 1
         }
