@@ -17,6 +17,16 @@ export default defineBackground(() => {
     void ensureOffscreen().catch((error: unknown) => {
       console.error("[mnemium/bg] ensureOffscreen failed on install", error);
     });
+    // First install (not update / re-enable) → open the onboarding tab.
+    // Without this, users have no idea pairing / model setup even exists —
+    // the popup just shows an empty Recent list with no CTA.
+    if (details.reason === "install") {
+      void chrome.tabs
+        .create({ url: chrome.runtime.getURL("onboarding.html") })
+        .catch((error: unknown) => {
+          console.error("[mnemium/bg] failed to open onboarding tab", error);
+        });
+    }
   });
 
   chrome.runtime.onStartup.addListener(() => {
