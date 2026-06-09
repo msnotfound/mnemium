@@ -338,7 +338,7 @@ func (s *Server) handleModelProgress(w http.ResponseWriter, r *http.Request) {
 		all = append(all, map[string]any{
 			"name": snap.Name, "type": "hf-model", "stage": snap.Status,
 			"total": snap.Total, "downloaded": snap.Downloaded, "percent": snap.Percent,
-			"status": snap.Status, "error": snap.Error,
+			"status": snap.Status, "error": snap.Error, "message": snap.Message,
 			"startedAt": snap.StartedAt, "finishedAt": snap.FinishedAt,
 			"bytesPerSec": snap.BytesPerSec, "url": snap.URL,
 		})

@@ -42,6 +42,7 @@ type Snapshot struct {
 	Percent     float64 `json:"percent"`
 	Status      string  `json:"status"` // "running" | "done" | "failed"
 	Error       string  `json:"error,omitempty"`
+	Message     string  `json:"message,omitempty"` // optional human label (retry banner, etc.)
 	StartedAt   int64   `json:"startedAt"`
 	FinishedAt  int64   `json:"finishedAt,omitempty"`
 	BytesPerSec int64   `json:"bytesPerSec,omitempty"`
@@ -176,8 +177,10 @@ func (m *Manager) Available() ([]string, error) {
 	return out, nil
 }
 
-// run does the actual download. Handles Range resume + sha256 check +
-// atomic rename + progress reporting.
+// run does the actual download with auto-retry on transient TCP errors.
+// Each attempt: HTTP Range resume from <name>.part + sha256 streaming +
+// explicit-close + atomic rename. Up to 4 retries with exponential
+// backoff (1s, 2s, 4s, 8s) on connection-reset / EOF mid-stream.
 func (m *Manager) run(ctx context.Context, j *job) {
 	defer func() {
 		m.mu.Lock()
@@ -190,6 +193,37 @@ func (m *Manager) run(ctx context.Context, j *job) {
 	target := filepath.Join(m.dir, j.name)
 	partial := target + ".part"
 
+	const maxRetries = 4
+	var lastErr error
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		if attempt > 0 {
+			backoff := time.Duration(1<<(attempt-1)) * time.Second
+			j.setMessage(fmt.Sprintf("retry %d/%d after %s — last error: %v",
+				attempt, maxRetries, backoff, lastErr))
+			select {
+			case <-ctx.Done():
+				j.fail(ctx.Err())
+				return
+			case <-time.After(backoff):
+			}
+		}
+		err := m.attempt(ctx, j, partial, target)
+		if err == nil {
+			return // terminal — j already in success or fail state
+		}
+		if !isTransient(err) {
+			j.fail(err)
+			return
+		}
+		lastErr = err
+	}
+	j.fail(fmt.Errorf("download failed after %d retries: %w", maxRetries, lastErr))
+}
+
+// attempt is one download cycle. Returns:
+//   - nil  → j was already marked complete or failed; caller stops.
+//   - non-nil transient error → caller should backoff + retry.
+func (m *Manager) attempt(ctx context.Context, j *job, partial, target string) error {
 	var offset int64
 	if info, err := os.Stat(partial); err == nil {
 		offset = info.Size()
@@ -198,22 +232,29 @@ func (m *Manager) run(ctx context.Context, j *job) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, j.url, nil)
 	if err != nil {
 		j.fail(err)
-		return
+		return nil
 	}
 	if offset > 0 {
 		req.Header.Set("Range", "bytes="+strconv.FormatInt(offset, 10)+"-")
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		j.fail(err)
-		return
+		return err // transient — request never reached server
 	}
 	defer resp.Body.Close()
+
+	// 416 Range Not Satisfiable on a resume usually means our .part
+	// already covers the whole file (a previous attempt finished the
+	// download but couldn't atomic-rename — e.g. Windows file-lock).
+	// Finalize instead of erroring.
+	if resp.StatusCode == http.StatusRequestedRangeNotSatisfiable && offset > 0 {
+		return m.finalizeFromPart(j, partial, target)
+	}
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusPartialContent {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
 		j.fail(fmt.Errorf("HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body))))
-		return
+		return nil
 	}
 
 	var openFlags int
@@ -226,38 +267,37 @@ func (m *Manager) run(ctx context.Context, j *job) {
 	f, err := os.OpenFile(partial, openFlags, 0o644)
 	if err != nil {
 		j.fail(err)
-		return
+		return nil
 	}
-	defer f.Close()
 
 	total := resp.ContentLength
 	if total > 0 {
-		total += offset // ContentLength on 206 is the remaining bytes
+		total += offset // ContentLength on 206 is remaining bytes only
 	}
 	hasher := sha256.New()
-	// If we resumed, fold the existing bytes into the hash before reading
-	// new ones. Otherwise sha verification at the end is wrong.
 	if offset > 0 {
 		if err := rehash(partial, hasher, offset); err != nil {
+			_ = f.Close()
 			j.fail(fmt.Errorf("rehash partial: %w", err))
-			return
+			return nil
 		}
 	}
 
-	reader := &progressReader{
-		r:     resp.Body,
-		j:     j,
-		hash:  hasher,
-		base:  offset,
-		total: total,
-	}
+	reader := &progressReader{r: resp.Body, j: j, hash: hasher, base: offset, total: total}
 	if _, err := io.Copy(f, reader); err != nil {
-		j.fail(err)
-		return
+		_ = f.Close()
+		return err // transient — wsarecv connection reset, EOF mid-stream, etc.
 	}
 	if err := f.Sync(); err != nil {
+		_ = f.Close()
 		j.fail(err)
-		return
+		return nil
+	}
+	// CRITICAL on Windows: release the handle before rename. Linux
+	// tolerates renaming an open file; Windows returns "file in use".
+	if err := f.Close(); err != nil {
+		j.fail(err)
+		return nil
 	}
 
 	if j.sha != "" {
@@ -265,15 +305,65 @@ func (m *Manager) run(ctx context.Context, j *job) {
 		if !strings.EqualFold(got, j.sha) {
 			_ = os.Remove(partial)
 			j.fail(fmt.Errorf("sha256 mismatch: got %s want %s", got, j.sha))
-			return
+			return nil
 		}
 	}
 
 	if err := os.Rename(partial, target); err != nil {
 		j.fail(err)
-		return
+		return nil
 	}
 	j.complete()
+	return nil
+}
+
+// finalizeFromPart is called when the server returns 416 — our .part is
+// at-or-past the requested range, which on a resume means it's
+// already complete. Atomic-rename and mark done.
+func (m *Manager) finalizeFromPart(j *job, partial, target string) error {
+	if err := os.Rename(partial, target); err != nil {
+		j.fail(fmt.Errorf("416: rename .part to final failed: %w", err))
+		return nil
+	}
+	j.setMessage("recovered .part from previous attempt — done")
+	j.complete()
+	return nil
+}
+
+// isTransient classifies an error as worth retrying. Network resets, EOF
+// mid-stream, and unexpected close all qualify; context cancellation
+// does not (caller already handles that).
+func isTransient(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+		return true
+	}
+	s := err.Error()
+	patterns := []string{
+		"connection reset",
+		"connection forcibly closed",
+		"connection was forcibly closed",
+		"forcibly closed by the remote host",
+		"broken pipe",
+		"wsarecv",
+		"wsasend",
+		"unexpected EOF",
+		"timeout",
+		"i/o timeout",
+		"reset by peer",
+		"no such host", // DNS hiccup, often transient on flaky links
+	}
+	for _, p := range patterns {
+		if strings.Contains(s, p) {
+			return true
+		}
+	}
+	return false
 }
 
 func rehash(path string, h io.Writer, n int64) error {
@@ -310,6 +400,12 @@ func (pr *progressReader) Read(p []byte) (int, error) {
 }
 
 // ---- job helpers ---------------------------------------------------------
+
+func (j *job) setMessage(msg string) {
+	j.mu.Lock()
+	j.snap.Message = msg
+	j.mu.Unlock()
+}
 
 func (j *job) snapshot() Snapshot {
 	j.mu.Lock()
