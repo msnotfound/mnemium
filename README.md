@@ -25,15 +25,19 @@ second brain. Capture what you discuss → distill it into typed memories
 
 ### 1 — Install the daemon
 
-**Windows** (PowerShell):
+**Windows** (any PowerShell, including 5.1):
 ```powershell
-[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; irm https://github.com/msnotfound/mnemium/releases/latest/download/install.ps1 | iex
+curl.exe -fsSL https://github.com/msnotfound/mnemium/releases/latest/download/install.ps1 | iex
 ```
 
-> The leading `[Net.ServicePointManager]::SecurityProtocol = …` is required on **Windows PowerShell 5.1** (the system default), which still negotiates TLS 1.0 outbound — GitHub rejects this at the SSL handshake. PowerShell 7+ doesn't need it. Alternatively, use the built-in `curl.exe` which has its own TLS stack:
+> `curl.exe` ships with Windows 10 (1803+) and Windows 11. We use it instead of PowerShell's `Invoke-RestMethod` because `irm` on Windows PowerShell 5.1 (the system default) inherits .NET's TLS defaults — older Win10 boxes negotiate TLS 1.0 outbound and GitHub rejects the handshake. `curl.exe` brings its own TLS stack (Schannel) and Just Works.
+>
+> *If you prefer `irm`, set the protocol first:*
 > ```powershell
-> curl.exe -fsSL https://github.com/msnotfound/mnemium/releases/latest/download/install.ps1 | iex
+> [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+> irm https://github.com/msnotfound/mnemium/releases/latest/download/install.ps1 | iex
 > ```
+> *(Still fails on boxes where corporate AV or proxies break .NET HTTPS.)*
 
 **macOS / Linux**:
 ```bash
