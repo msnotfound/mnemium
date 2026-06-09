@@ -36,6 +36,25 @@ export default defineBackground(() => {
     });
   });
 
+  // Engine rebuild on config change. We watch chrome.storage from the SW
+  // (where it works — offscreen docs have no chrome.storage access at all)
+  // and dispatch `engine.reload` to offscreen via the existing RPC route.
+  // Without this, the engine snapshots whatever backends the config resolved
+  // to at first boot (typically Disabled, since pairing hasn't happened yet)
+  // and never re-resolves — capture pipeline calls no-op backends forever.
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== "local" || changes.config === undefined) return;
+    const oldCfg = (changes.config.oldValue ?? {}) as { daemon?: unknown; backends?: unknown };
+    const newCfg = (changes.config.newValue ?? {}) as { daemon?: unknown; backends?: unknown };
+    const daemonChanged = JSON.stringify(oldCfg.daemon) !== JSON.stringify(newCfg.daemon);
+    const backendsChanged = JSON.stringify(oldCfg.backends) !== JSON.stringify(newCfg.backends);
+    if (!daemonChanged && !backendsChanged) return;
+    console.info("[mnemium/bg] config changed (daemon/backends) — engine.reload to offscreen");
+    void routeRpc({ reqId: crypto.randomUUID(), msg: { t: "engine.reload" } }).catch((error: unknown) => {
+      console.warn("[mnemium/bg] engine.reload dispatch failed", error);
+    });
+  });
+
   chrome.commands.onCommand.addListener((command) => {
     console.info("[mnemium/bg] command", command);
     if (command === "pull-memory") {

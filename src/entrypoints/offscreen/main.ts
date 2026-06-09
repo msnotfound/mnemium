@@ -32,27 +32,11 @@ let enginePromise: Promise<RuntimeEngine> | null = null;
 
 console.info("[mnemium/off] offscreen booted", new Date().toISOString());
 
-// Watch for config changes — daemon pairing or backend swap — and invalidate
-// the engine so the next call rebuilds backends from the fresh config. Without
-// this, the engine snapshots the (often-Disabled) backends at first boot and
-// later pairing has no effect until the offscreen doc is torn down.
-//
-// We tear down on:
-//   - daemon.{port,token} changing (pair/unpair)
-//   - any backends.* kind change (e.g. switch distill from llama-cpp to ollama)
-// Pure ergonomic deltas (autoInject, theme, etc.) don't trigger a rebuild.
-chrome.storage.onChanged.addListener((changes, area) => {
-  if (area !== "local" || changes.config === undefined) return;
-  const oldCfg = (changes.config.oldValue ?? {}) as { daemon?: Record<string, unknown>; backends?: Record<string, unknown> };
-  const newCfg = (changes.config.newValue ?? {}) as { daemon?: Record<string, unknown>; backends?: Record<string, unknown> };
-  if (
-    JSON.stringify(oldCfg.daemon) !== JSON.stringify(newCfg.daemon) ||
-    JSON.stringify(oldCfg.backends) !== JSON.stringify(newCfg.backends)
-  ) {
-    console.info("[mnemium/off] config changed (daemon/backends) — invalidating engine");
-    enginePromise = null;
-  }
-});
+// Engine rebuild on daemon/backends config change is handled by the service
+// worker (which is the only place chrome.storage works in MV3). The SW
+// listens to chrome.storage.onChanged and sends us an `engine.reload` RPC
+// when config.daemon or config.backends changes. The handler for that RPC
+// (registered below in serve(...)) sets enginePromise = null.
 {
   const g = globalThis as {
     FileSystemHandle?: unknown;

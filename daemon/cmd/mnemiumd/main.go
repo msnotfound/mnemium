@@ -18,7 +18,7 @@ import (
 	"github.com/msnotfound/mnemium/daemon/internal/server"
 )
 
-const version = "0.0.4"
+const version = "0.0.5"
 
 func main() {
 	root := &cobra.Command{
