@@ -27,8 +27,13 @@ second brain. Capture what you discuss → distill it into typed memories
 
 **Windows** (PowerShell):
 ```powershell
-irm https://github.com/msnotfound/mnemium/releases/latest/download/install.ps1 | iex
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; irm https://github.com/msnotfound/mnemium/releases/latest/download/install.ps1 | iex
 ```
+
+> The leading `[Net.ServicePointManager]::SecurityProtocol = …` is required on **Windows PowerShell 5.1** (the system default), which still negotiates TLS 1.0 outbound — GitHub rejects this at the SSL handshake. PowerShell 7+ doesn't need it. Alternatively, use the built-in `curl.exe` which has its own TLS stack:
+> ```powershell
+> curl.exe -fsSL https://github.com/msnotfound/mnemium/releases/latest/download/install.ps1 | iex
+> ```
 
 **macOS / Linux**:
 ```bash
