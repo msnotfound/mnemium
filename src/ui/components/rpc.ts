@@ -72,10 +72,17 @@ export async function getDaemonStatus(): Promise<DaemonStatusEnvelope> {
   return result ?? { paired: false, reachable: false, status: null };
 }
 
-/** Snapshot of one download job — matches mnemiumd's Snapshot exactly. */
+/** Snapshot of one job — covers all four daemon-side job types:
+ *  hf-model, llama-server, ollama-install, ollama-pull. */
 export interface DaemonProgressEntry {
   name: string;
-  url: string;
+  /** hf-model | llama-server | ollama-install | ollama-pull */
+  type?: string;
+  /** downloading | extracting | installing | pulling | ready */
+  stage?: string;
+  /** Human label (e.g. "Pulling manifest", "Installed to …"). */
+  message?: string;
+  url?: string;
   total: number;
   downloaded: number;
   percent: number;
@@ -119,6 +126,34 @@ export async function getModelProgress(): Promise<DaemonProgressEnvelope> {
 
 export async function deleteModel(name: string): Promise<{ ok: boolean; error?: string }> {
   const result = await sendRpc<{ ok: boolean; error?: string }>({ t: "daemon.modelDelete", name });
+  return result ?? { ok: false, error: "no response" };
+}
+
+/** Tells the daemon to install whatever the active config needs. */
+export async function ensureRuntime(): Promise<{ ok: boolean; started?: DaemonProgressEntry[]; error?: string }> {
+  const result = await sendRpc<{ ok: boolean; started?: DaemonProgressEntry[]; error?: string }>({
+    t: "daemon.runtimeEnsure",
+  });
+  return result ?? { ok: false, error: "no response" };
+}
+
+/** Launches the platform-appropriate Ollama installer. */
+export async function installOllama(): Promise<{ ok: boolean; entry?: DaemonProgressEntry; error?: string }> {
+  const result = await sendRpc<{ ok: boolean; entry?: DaemonProgressEntry; error?: string }>({
+    t: "daemon.installOllama",
+  });
+  return result ?? { ok: false, error: "no response" };
+}
+
+/** Writes the daemon's *internal* backend config (which model files /
+ *  external services it uses). Different from the extension's
+ *  `updateSettings` (which says whether the extension talks to the
+ *  daemon vs. its own embedder/etc). */
+export async function putDaemonConfig(patch: unknown): Promise<{ ok: boolean; config?: unknown; error?: string }> {
+  const result = await sendRpc<{ ok: boolean; config?: unknown; error?: string }>({
+    t: "daemon.putConfig",
+    patch,
+  });
   return result ?? { ok: false, error: "no response" };
 }
 

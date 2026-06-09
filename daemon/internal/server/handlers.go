@@ -23,6 +23,8 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/model/download", s.handleModelDownload)
 	mux.HandleFunc("/model/progress", s.handleModelProgress)
 	mux.HandleFunc("/model/", s.handleModelByName) // DELETE /model/{name}
+	mux.HandleFunc("/runtime/ensure", s.handleRuntimeEnsure)
+	mux.HandleFunc("/runtime/install-ollama", s.handleRuntimeInstallOllama)
 }
 
 // ---- /status -------------------------------------------------------------
@@ -328,9 +330,29 @@ func (s *Server) handleModelProgress(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "GET only")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"downloads": s.models.Snapshots(),
-	})
+	// Merge model downloads (GGUF files) and runtime jobs (llama-server
+	// install, Ollama install, ollama-pull) so the extension can render
+	// everything in a single progress list.
+	all := make([]map[string]any, 0)
+	for _, snap := range s.models.Snapshots() {
+		all = append(all, map[string]any{
+			"name": snap.Name, "type": "hf-model", "stage": snap.Status,
+			"total": snap.Total, "downloaded": snap.Downloaded, "percent": snap.Percent,
+			"status": snap.Status, "error": snap.Error,
+			"startedAt": snap.StartedAt, "finishedAt": snap.FinishedAt,
+			"bytesPerSec": snap.BytesPerSec, "url": snap.URL,
+		})
+	}
+	for _, snap := range s.runtime.Snapshots() {
+		all = append(all, map[string]any{
+			"name": snap.Name, "type": snap.Type, "stage": snap.Stage,
+			"total": snap.Total, "downloaded": snap.Downloaded, "percent": snap.Percent,
+			"status": snap.Status, "error": snap.Error, "message": snap.Message,
+			"startedAt": snap.StartedAt, "finishedAt": snap.FinishedAt,
+			"bytesPerSec": snap.BytesPerSec,
+		})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"downloads": all})
 }
 
 func (s *Server) handleModelByName(w http.ResponseWriter, r *http.Request) {
@@ -353,6 +375,38 @@ func (s *Server) handleModelByName(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "DELETE only")
 	}
+}
+
+// ---- /runtime/* (dependency orchestration) -------------------------------
+
+func (s *Server) handleRuntimeEnsure(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "POST only")
+		return
+	}
+	cfg, _ := s.snapshot()
+	jobs := s.runtime.EnsureConfig(r.Context(), cfg)
+	// Backends re-resolve themselves on the next request after a job
+	// completes (orchestrator handles its own lifecycle), but trigger an
+	// immediate reconfigure so /status reflects whatever is now ready.
+	s.Reconfigure(cfg)
+	writeJSON(w, http.StatusAccepted, map[string]any{
+		"started": jobs,
+		"note":    "Poll GET /model/progress for live status.",
+	})
+}
+
+func (s *Server) handleRuntimeInstallOllama(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "POST only")
+		return
+	}
+	snap, err := s.runtime.InstallOllama(r.Context())
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "install_failed", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusAccepted, snap)
 }
 
 // ---- error helpers -------------------------------------------------------

@@ -85,6 +85,9 @@ serve(
     "daemon.modelDownload": async (msg) => handleDaemonModelDownload(msg),
     "daemon.modelProgress": async () => handleDaemonModelProgress(),
     "daemon.modelDelete": async (msg) => handleDaemonModelDelete(msg),
+    "daemon.runtimeEnsure": async () => handleRuntimeEnsure(),
+    "daemon.installOllama": async () => handleInstallOllama(),
+    "daemon.putConfig": async (msg) => handlePutDaemonConfig(msg),
   },
   { target: "mnemium-offscreen" },
 );
@@ -150,6 +153,47 @@ async function handleDaemonModelDelete(
   try {
     await client.modelDelete(msg.name);
     return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+async function handleRuntimeEnsure(): Promise<{ ok: boolean; started?: ModelProgressEntry[]; error?: string }> {
+  const client = await freshDaemonClient();
+  if (client === null) {
+    return { ok: false, error: "daemon not paired" };
+  }
+  try {
+    const result = await client.runtimeEnsure();
+    return { ok: true, started: result.started };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+async function handleInstallOllama(): Promise<{ ok: boolean; entry?: ModelProgressEntry; error?: string }> {
+  const client = await freshDaemonClient();
+  if (client === null) {
+    return { ok: false, error: "daemon not paired" };
+  }
+  try {
+    const entry = await client.runtimeInstallOllama();
+    return { ok: true, entry };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+async function handlePutDaemonConfig(
+  msg: Extract<Rpc, { t: "daemon.putConfig" }>,
+): Promise<{ ok: boolean; config?: unknown; error?: string }> {
+  const client = await freshDaemonClient();
+  if (client === null) {
+    return { ok: false, error: "daemon not paired" };
+  }
+  try {
+    const config = await client.putConfig(msg.patch as Parameters<typeof client.putConfig>[0]);
+    return { ok: true, config };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };
   }

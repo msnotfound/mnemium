@@ -40,7 +40,13 @@ export interface DaemonConfigShape {
 
 export interface ModelProgressEntry {
   name: string;
-  url: string;
+  /** "hf-model" | "llama-server" | "ollama-install" | "ollama-pull". */
+  type?: string;
+  /** "downloading" | "extracting" | "installing" | "pulling" | "ready". */
+  stage?: string;
+  /** Human-readable progress message ("Extracting llama-server", "pulling manifest", etc.). */
+  message?: string;
+  url?: string;
   total: number;
   downloaded: number;
   percent: number;
@@ -130,6 +136,18 @@ export class DaemonClient {
 
   async modelDelete(name: string): Promise<{ ok: boolean; name: string }> {
     return this.request("DELETE", `/model/${encodeURIComponent(name)}`, undefined, 5000);
+  }
+
+  /** Asks the daemon to install / configure whatever the active config
+   *  needs (llama-server binary, ollama pull, etc.). Idempotent. */
+  async runtimeEnsure(): Promise<{ started: ModelProgressEntry[]; note?: string }> {
+    return this.request("POST", "/runtime/ensure", {}, 5000);
+  }
+
+  /** Kicks off the Ollama installer for the user's platform. Returns
+   *  a snapshot the caller polls via /model/progress. */
+  async runtimeInstallOllama(): Promise<ModelProgressEntry> {
+    return this.request("POST", "/runtime/install-ollama", {}, 10000);
   }
 
   private async request<T>(

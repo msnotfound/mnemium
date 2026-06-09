@@ -49,12 +49,12 @@ func Resolve(cfg config.Config, paths xdg.Paths) Set {
 		Embed:   embed.Disabled{},
 		Vec:     vec.Disabled{},
 	}
-	if d, err := resolveDistill(cfg.Backends.Distill, paths.Models); err != nil {
+	if d, err := resolveDistill(cfg.Backends.Distill, paths.Models, paths.Bin); err != nil {
 		log.Printf("distill backend %s disabled: %v", cfg.Backends.Distill.Kind, err)
 	} else if d != nil {
 		set.Distill = d
 	}
-	if e, err := resolveEmbed(cfg.Backends.Embed, paths.Models); err != nil {
+	if e, err := resolveEmbed(cfg.Backends.Embed, paths.Models, paths.Bin); err != nil {
 		log.Printf("embed backend %s disabled: %v", cfg.Backends.Embed.Kind, err)
 	} else if e != nil {
 		set.Embed = e
@@ -67,7 +67,7 @@ func Resolve(cfg config.Config, paths xdg.Paths) Set {
 	return set
 }
 
-func resolveDistill(spec config.BackendSpec, modelsDir string) (distill.Backend, error) {
+func resolveDistill(spec config.BackendSpec, modelsDir, binDir string) (distill.Backend, error) {
 	switch spec.Kind {
 	case "", "disabled":
 		return nil, nil
@@ -76,20 +76,20 @@ func resolveDistill(spec config.BackendSpec, modelsDir string) (distill.Backend,
 	case "openai", "openrouter", "anthropic", "together":
 		return distill.NewOpenAI(spec.Endpoint, spec.Model, spec.APIKeyEnv)
 	case "llama-cpp":
-		return distill.NewLlamaCPP(modelsDir, spec.Model, spec.Threads, spec.Ctx)
+		return distill.NewLlamaCPP(modelsDir, binDir, spec.Model, spec.Threads, spec.Ctx)
 	default:
 		return nil, fmt.Errorf("unknown kind %q", spec.Kind)
 	}
 }
 
-func resolveEmbed(spec config.BackendSpec, modelsDir string) (embed.Backend, error) {
+func resolveEmbed(spec config.BackendSpec, modelsDir, binDir string) (embed.Backend, error) {
 	switch spec.Kind {
 	case "", "disabled":
 		return nil, nil
 	case "ollama":
 		return embed.NewOllama(spec.Endpoint, spec.Model)
 	case "llama-cpp":
-		return embed.NewLlamaCPP(modelsDir, spec.Model, spec.Threads)
+		return embed.NewLlamaCPP(modelsDir, binDir, spec.Model, spec.Threads)
 	default:
 		return nil, fmt.Errorf("unknown kind %q", spec.Kind)
 	}

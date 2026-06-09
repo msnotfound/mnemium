@@ -19,6 +19,7 @@ import (
 	"github.com/msnotfound/mnemium/daemon/internal/config"
 	"github.com/msnotfound/mnemium/daemon/internal/models"
 	"github.com/msnotfound/mnemium/daemon/internal/pairing"
+	"github.com/msnotfound/mnemium/daemon/internal/runtime"
 	"github.com/msnotfound/mnemium/daemon/internal/xdg"
 )
 
@@ -31,6 +32,7 @@ type Server struct {
 	paths    xdg.Paths
 	backends backends.Set
 	models   *models.Manager
+	runtime  *runtime.Orchestrator
 
 	httpSrv  *http.Server
 	listener net.Listener
@@ -56,6 +58,7 @@ func New(cfg config.Config, creds pairing.Credentials, version string, paths xdg
 		paths:    paths,
 		backends: backends.Resolve(cfg, paths),
 		models:   mgr,
+		runtime:  runtime.New(paths),
 	}, nil
 }
 

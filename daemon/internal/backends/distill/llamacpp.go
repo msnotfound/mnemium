@@ -15,6 +15,8 @@ import (
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/msnotfound/mnemium/daemon/internal/runtime"
 )
 
 // LlamaCPP wraps a managed llama-server subprocess from the llama.cpp
@@ -45,17 +47,18 @@ type LlamaCPP struct {
 // modelsDir is the directory where downloaded GGUF files live; if model
 // is a bare name (no path separator) it's resolved relative to modelsDir.
 // Otherwise it's treated as an absolute path.
-func NewLlamaCPP(modelsDir, model string, threads, ctxSize int) (*LlamaCPP, error) {
+//
+// binDir is mnemiumd's auto-install location for llama-server (XDG bin).
+// We check, in order: $MNEMIUM_LLAMA_SERVER → <binDir>/llama-server[.exe]
+// → system $PATH. The runtime ensure flow populates <binDir>; users with
+// custom (GPU) builds can override via env or PATH.
+func NewLlamaCPP(modelsDir, binDir, model string, threads, ctxSize int) (*LlamaCPP, error) {
 	if model == "" {
 		return nil, errors.New("llama-cpp distill: model is required")
 	}
-	bin := os.Getenv("MNEMIUM_LLAMA_SERVER")
-	if bin == "" {
-		path, err := exec.LookPath("llama-server")
-		if err != nil {
-			return nil, fmt.Errorf("llama-server binary not found on PATH; set MNEMIUM_LLAMA_SERVER or install llama.cpp: %w", err)
-		}
-		bin = path
+	bin, err := runtime.LlamaServerBinary(binDir)
+	if err != nil {
+		return nil, err
 	}
 	modelPath := model
 	if !filepath.IsAbs(model) && modelsDir != "" {

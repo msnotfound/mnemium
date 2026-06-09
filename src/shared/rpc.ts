@@ -30,7 +30,10 @@ export type Rpc =
   | { t: "daemon.status" }
   | { t: "daemon.modelDownload"; name: string; url: string; sha256?: string }
   | { t: "daemon.modelProgress" }
-  | { t: "daemon.modelDelete"; name: string };
+  | { t: "daemon.modelDelete"; name: string }
+  | { t: "daemon.runtimeEnsure" }
+  | { t: "daemon.installOllama" }
+  | { t: "daemon.putConfig"; patch: unknown };
 
 /** Envelope every message is wrapped in for request/response correlation. */
 export interface RpcEnvelope {

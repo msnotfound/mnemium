@@ -15,6 +15,8 @@ import (
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/msnotfound/mnemium/daemon/internal/runtime"
 )
 
 // LlamaCPP wraps a managed `llama-server --embedding` subprocess. POSTs
@@ -32,17 +34,13 @@ type LlamaCPP struct {
 	dim     int
 }
 
-func NewLlamaCPP(modelsDir, model string, threads int) (*LlamaCPP, error) {
+func NewLlamaCPP(modelsDir, binDir, model string, threads int) (*LlamaCPP, error) {
 	if model == "" {
 		return nil, errors.New("llama-cpp embed: model is required")
 	}
-	bin := os.Getenv("MNEMIUM_LLAMA_SERVER")
-	if bin == "" {
-		path, err := exec.LookPath("llama-server")
-		if err != nil {
-			return nil, fmt.Errorf("llama-server binary not found on PATH; set MNEMIUM_LLAMA_SERVER or install llama.cpp: %w", err)
-		}
-		bin = path
+	bin, err := runtime.LlamaServerBinary(binDir)
+	if err != nil {
+		return nil, err
 	}
 	modelPath := model
 	if !filepath.IsAbs(model) && modelsDir != "" {
@@ -52,8 +50,8 @@ func NewLlamaCPP(modelsDir, model string, threads int) (*LlamaCPP, error) {
 		}
 		modelPath = candidate
 	}
-	if _, err := os.Stat(modelPath); err != nil {
-		return nil, fmt.Errorf("model file %s not found: %w", modelPath, err)
+	if _, statErr := os.Stat(modelPath); statErr != nil {
+		return nil, fmt.Errorf("model file %s not found: %w", modelPath, statErr)
 	}
 	return &LlamaCPP{
 		modelPath: modelPath,

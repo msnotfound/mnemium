@@ -18,6 +18,7 @@ type Paths struct {
 	Config    string // ~/.config/mnemium/
 	Data      string // ~/.local/share/mnemium/
 	Models    string // ~/.local/share/mnemium/models/
+	Bin       string // ~/.local/share/mnemium/bin/   (auto-installed binaries: llama-server, etc.)
 	Vectors   string // ~/.local/share/mnemium/vectors.db
 	PortFile  string // ~/.local/share/mnemium/port
 	TokenFile string // ~/.local/share/mnemium/mnemium-token
@@ -31,6 +32,7 @@ func Resolve() Paths {
 			Config:    home,
 			Data:      home,
 			Models:    filepath.Join(home, "models"),
+			Bin:       filepath.Join(home, "bin"),
 			Vectors:   filepath.Join(home, "vectors.db"),
 			PortFile:  filepath.Join(home, "port"),
 			TokenFile: filepath.Join(home, "mnemium-token"),
@@ -43,6 +45,7 @@ func Resolve() Paths {
 		Config:    config,
 		Data:      data,
 		Models:    filepath.Join(data, "models"),
+		Bin:       filepath.Join(data, "bin"),
 		Vectors:   filepath.Join(data, "vectors.db"),
 		PortFile:  filepath.Join(data, "port"),
 		TokenFile: filepath.Join(data, "mnemium-token"),
@@ -92,7 +95,7 @@ func osDataDir() string {
 
 // Ensure creates every directory in Paths that doesn't already exist.
 func (p Paths) Ensure() error {
-	for _, dir := range []string{p.Config, p.Data, p.Models} {
+	for _, dir := range []string{p.Config, p.Data, p.Models, p.Bin} {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return err
 		}

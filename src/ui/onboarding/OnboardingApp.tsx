@@ -5,9 +5,11 @@ import { findModel, KNOWN_MODELS } from "@shared/model-registry";
 
 import { SurfaceRoot } from "../components/Primitives";
 import {
+  ensureRuntime,
   getDaemonStatus,
   getModelProgress,
   parsePairingString,
+  putDaemonConfig,
   startModelDownload,
   updateSettings,
   type DaemonProgressEntry,
@@ -201,26 +203,62 @@ export function OnboardingApp(): ReactElement {
   }
 
   async function startDownloads(choice: ModelChoice): Promise<void> {
-    const names = Array.from(new Set([choice.distillName, choice.embedName]));
     setDownloadError("");
 
     try {
+      // 1) Persist the extension's backend selection — "daemon" means
+      //    distill / embed / vec are all proxied through mnemiumd. The
+      //    daemon owns the actual model name (set in step 2).
+      await updateSettings({
+        backends: {
+          distill: { kind: "daemon" },
+          embed:   { kind: "daemon" },
+          vec:     { kind: "daemon" },
+        },
+      });
+
+      // 2) Configure mnemiumd itself — its *internal* backends are
+      //    llama-cpp (default) + the sqlite vec store.
+      const daemonPatch = {
+        backends: {
+          distill: { kind: "llama-cpp", model: choice.distillName },
+          embed:   { kind: "llama-cpp", model: choice.embedName },
+          vec:     { kind: "sqlite" },
+        },
+      };
+      const cfgResult = await putDaemonConfig(daemonPatch);
+      if (!cfgResult.ok) {
+        throw new Error(cfgResult.error ?? "Could not write daemon config");
+      }
+
+      // 3) Kick off llama-server install if missing (idempotent).
+      const ensure = await ensureRuntime();
+      if (!ensure.ok) {
+        throw new Error(ensure.error ?? "Could not start runtime setup");
+      }
+
+      // 4) Start each GGUF model download. Daemon-side they all flow
+      //    through /model/progress alongside the runtime install.
+      const names = Array.from(new Set([choice.distillName, choice.embedName]));
       for (const name of names) {
         const known = findModel(name);
         if (known === undefined) {
-          throw new Error(`No URL registered for model "${name}". Add it to shared/model-registry.ts.`);
+          throw new Error(`No URL registered for "${name}". Add it to shared/model-registry.ts.`);
         }
         const result = await startModelDownload(known.name, known.url, known.sha256 || undefined);
         if (!result.ok) {
           throw new Error(result.error ?? `Could not start ${name}`);
         }
       }
-      setActiveDownloads(names);
+
+      // Watch all four jobs: llama-server + 2 GGUFs (distill+embed,
+      // deduped if same model is used for both).
+      setActiveDownloads([...names, "llama-server"]);
       setProgressEntries([]);
       setProgressError("");
       setStep(5);
     } catch (error) {
-      setDownloadError(error instanceof Error ? error.message : "Could not start model downloads.");
+      setDownloadError(error instanceof Error ? error.message : "Could not start setup.");
     }
   }
 
