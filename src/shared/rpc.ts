@@ -33,7 +33,8 @@ export type Rpc =
   | { t: "daemon.modelDelete"; name: string }
   | { t: "daemon.runtimeEnsure" }
   | { t: "daemon.installOllama" }
-  | { t: "daemon.putConfig"; patch: unknown };
+  | { t: "daemon.putConfig"; patch: unknown }
+  | { t: "engine.reload" };
 
 /** Envelope every message is wrapped in for request/response correlation. */
 export interface RpcEnvelope {

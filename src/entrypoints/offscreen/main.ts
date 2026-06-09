@@ -31,6 +31,28 @@ interface RuntimeEngine {
 let enginePromise: Promise<RuntimeEngine> | null = null;
 
 console.info("[mnemium/off] offscreen booted", new Date().toISOString());
+
+// Watch for config changes — daemon pairing or backend swap — and invalidate
+// the engine so the next call rebuilds backends from the fresh config. Without
+// this, the engine snapshots the (often-Disabled) backends at first boot and
+// later pairing has no effect until the offscreen doc is torn down.
+//
+// We tear down on:
+//   - daemon.{port,token} changing (pair/unpair)
+//   - any backends.* kind change (e.g. switch distill from llama-cpp to ollama)
+// Pure ergonomic deltas (autoInject, theme, etc.) don't trigger a rebuild.
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== "local" || changes.config === undefined) return;
+  const oldCfg = (changes.config.oldValue ?? {}) as { daemon?: Record<string, unknown>; backends?: Record<string, unknown> };
+  const newCfg = (changes.config.newValue ?? {}) as { daemon?: Record<string, unknown>; backends?: Record<string, unknown> };
+  if (
+    JSON.stringify(oldCfg.daemon) !== JSON.stringify(newCfg.daemon) ||
+    JSON.stringify(oldCfg.backends) !== JSON.stringify(newCfg.backends)
+  ) {
+    console.info("[mnemium/off] config changed (daemon/backends) — invalidating engine");
+    enginePromise = null;
+  }
+});
 {
   const g = globalThis as {
     FileSystemHandle?: unknown;
@@ -88,6 +110,18 @@ serve(
     "daemon.runtimeEnsure": async () => handleRuntimeEnsure(),
     "daemon.installOllama": async () => handleInstallOllama(),
     "daemon.putConfig": async (msg) => handlePutDaemonConfig(msg),
+    "engine.reload": async () => {
+      console.info("[mnemium/off] engine.reload — invalidating");
+      enginePromise = null;
+      // Touch the engine so it boots fresh and any backend init errors
+      // surface in the caller's response.
+      try {
+        await engine();
+        return { ok: true };
+      } catch (error) {
+        return { ok: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    },
   },
   { target: "mnemium-offscreen" },
 );

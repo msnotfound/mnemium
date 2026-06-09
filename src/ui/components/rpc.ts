@@ -157,6 +157,15 @@ export async function putDaemonConfig(patch: unknown): Promise<{ ok: boolean; co
   return result ?? { ok: false, error: "no response" };
 }
 
+/** Tears down the offscreen engine and re-boots it. Use after a config
+ *  change to pick up new daemon credentials / backend kinds. The
+ *  storage.onChanged listener in offscreen does this automatically for
+ *  daemon + backends changes; this is the explicit-trigger path. */
+export async function reloadEngine(): Promise<{ ok: boolean; error?: string }> {
+  const result = await sendRpc<{ ok: boolean; error?: string }>({ t: "engine.reload" });
+  return result ?? { ok: false, error: "no response" };
+}
+
 /** Parses a pairing string of the form `mn:<port>:<token>` (printed by
  *  `mnemiumd serve` on first boot). Returns null if the string isn't valid.
  *  Callers pass the result through `updateSettings({ daemon: { port, token } })`. */
