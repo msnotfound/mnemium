@@ -555,7 +555,16 @@ function progressPercent(entry: DaemonProgressEntry | undefined): number {
 function formatProgress(entry: DaemonProgressEntry | undefined): string {
   if (entry === undefined) return "Waiting for daemon progress...";
   if (entry.status === "failed") return `Failed: ${entry.error ?? "unknown error"}`;
-  if (entry.status === "done") return `${formatMb(entry.total)} · done`;
+  if (entry.status === "done") {
+    // The daemon sends a message like "already on disk at /home/.../models/..."
+    // when the file was present at boot, or "already installed at /home/.../bin/..."
+    // for llama-server. Prefer that over "0.0 MB · done" which is meaningless
+    // for files that never transited.
+    if (typeof entry.message === "string" && entry.message.length > 0) {
+      return entry.message;
+    }
+    return `${formatMb(entry.total)} · done`;
+  }
   const eta = etaSeconds(entry);
   const rate = entry.bytesPerSec ?? 0;
   return `${formatMb(entry.downloaded)} / ${formatMb(entry.total)} · ${formatRate(rate)}${eta > 0 ? ` · ETA ${eta}s` : ""}`;

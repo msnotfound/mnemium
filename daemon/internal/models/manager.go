@@ -95,7 +95,30 @@ func (m *Manager) Start(ctx context.Context, name, downloadURL, expectedSHA256 s
 		m.mu.Unlock()
 		return snap, nil
 	}
+	m.mu.Unlock()
 
+	// Short-circuit when the file is already on disk. Without this, every
+	// onboarding run re-kicks /model/download for already-present GGUFs and
+	// the resume logic ends up sending a Range request that gets HTTP 416.
+	// Functionally fine but the UI shows a fake "downloading" round-trip.
+	// Mirror EnsureLlamaServer's behavior in runtime/orchestrator.go.
+	target := filepath.Join(m.dir, name)
+	if info, err := os.Stat(target); err == nil && !info.IsDir() && info.Size() > 0 {
+		now := time.Now().Unix()
+		snap := Snapshot{
+			Name: name, URL: downloadURL,
+			Total: info.Size(), Downloaded: info.Size(), Percent: 100,
+			Status:    "done",
+			Message:   "already on disk at " + target,
+			StartedAt: now, FinishedAt: now,
+		}
+		m.mu.Lock()
+		m.results[name] = snap
+		m.mu.Unlock()
+		return snap, nil
+	}
+
+	m.mu.Lock()
 	jobCtx, cancel := context.WithCancel(context.Background())
 	j := &job{
 		name:   name,
