@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"os"
@@ -93,6 +94,15 @@ func (l *LlamaCPP) Ready() bool {
 
 func (l *LlamaCPP) Model() string { return filepath.Base(l.modelPath) }
 
+// Warm spawns llama-server proactively so the first /distill call doesn't
+// pay the 5–15s cold-start tax. Safe to call multiple times; subsequent
+// calls are no-ops while the subprocess is alive.
+func (l *LlamaCPP) Warm(ctx context.Context) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.ensureStarted(ctx)
+}
+
 // ensureStarted spawns llama-server if it isn't already up. Caller must
 // hold l.mu.
 func (l *LlamaCPP) ensureStarted(ctx context.Context) error {
@@ -112,25 +122,30 @@ func (l *LlamaCPP) ensureStarted(ctx context.Context) error {
 	if l.threads > 0 {
 		args = append(args, "--threads", strconv.Itoa(l.threads))
 	}
+	log.Printf("[distill/llama-cpp] spawning %s --model %s --port %d", l.binPath, filepath.Base(l.modelPath), port)
 	cmd := exec.Command(l.binPath, args...)
 	cmd.Stdout = os.Stderr // route llama-server logs to our stderr
 	cmd.Stderr = os.Stderr
 	configureProcAttr(cmd)
+	startedAt := time.Now()
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("spawn llama-server: %w", err)
 	}
 	l.proc = cmd
 	l.port = port
+	log.Printf("[distill/llama-cpp] spawned pid=%d port=%d — waiting for healthcheck", cmd.Process.Pid, port)
 
 	// Healthcheck loop — wait up to 60s for the server to accept requests.
 	deadline := time.Now().Add(60 * time.Second)
 	for time.Now().Before(deadline) {
 		if l.healthy(ctx) {
 			l.started = true
+			log.Printf("[distill/llama-cpp] ready in %s (port=%d model=%s)", time.Since(startedAt).Round(time.Millisecond), port, filepath.Base(l.modelPath))
 			return nil
 		}
 		time.Sleep(500 * time.Millisecond)
 	}
+	log.Printf("[distill/llama-cpp] healthcheck timed out after 60s; killing subprocess")
 	_ = l.killUnlocked()
 	return errors.New("llama-server didn't become healthy within 60s")
 }

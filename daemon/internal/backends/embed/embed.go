@@ -11,6 +11,10 @@ type Backend interface {
 	Ready() bool
 	Model() string
 	Dim() int
+	// Warm pre-spawns any subprocess / pre-loads any heavy state. Called
+	// from `mnemiumd serve` after Listen so the first /embed request
+	// doesn't pay the cold-start tax.
+	Warm(ctx context.Context) error
 }
 
 // Disabled is the no-op backend.
@@ -20,3 +24,4 @@ func (Disabled) Embed(_ context.Context, _ []string) ([][]float32, error) { retu
 func (Disabled) Ready() bool                                              { return false }
 func (Disabled) Model() string                                            { return "" }
 func (Disabled) Dim() int                                                 { return 0 }
+func (Disabled) Warm(_ context.Context) error                             { return nil }

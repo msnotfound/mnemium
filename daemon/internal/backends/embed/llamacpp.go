@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"os"
@@ -75,6 +76,14 @@ func (l *LlamaCPP) Dim() int {
 	return l.dim
 }
 
+// Warm spawns llama-server --embedding proactively so the first /embed
+// call doesn't pay the cold-start tax.
+func (l *LlamaCPP) Warm(ctx context.Context) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.ensureStarted(ctx)
+}
+
 func (l *LlamaCPP) ensureStarted(ctx context.Context) error {
 	if l.started && l.proc != nil && l.proc.ProcessState == nil {
 		return nil
@@ -92,24 +101,29 @@ func (l *LlamaCPP) ensureStarted(ctx context.Context) error {
 	if l.threads > 0 {
 		args = append(args, "--threads", strconv.Itoa(l.threads))
 	}
+	log.Printf("[embed/llama-cpp] spawning %s --model %s --port %d --embedding", l.binPath, filepath.Base(l.modelPath), port)
 	cmd := exec.Command(l.binPath, args...)
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	configureProcAttr(cmd)
+	startedAt := time.Now()
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("spawn llama-server (embed): %w", err)
 	}
 	l.proc = cmd
 	l.port = port
+	log.Printf("[embed/llama-cpp] spawned pid=%d port=%d — waiting for healthcheck", cmd.Process.Pid, port)
 
 	deadline := time.Now().Add(60 * time.Second)
 	for time.Now().Before(deadline) {
 		if l.healthy(ctx) {
 			l.started = true
+			log.Printf("[embed/llama-cpp] ready in %s (port=%d model=%s)", time.Since(startedAt).Round(time.Millisecond), port, filepath.Base(l.modelPath))
 			return nil
 		}
 		time.Sleep(500 * time.Millisecond)
 	}
+	log.Printf("[embed/llama-cpp] healthcheck timed out after 60s; killing subprocess")
 	_ = l.killUnlocked()
 	return errors.New("llama-server (embed) didn't become healthy within 60s")
 }

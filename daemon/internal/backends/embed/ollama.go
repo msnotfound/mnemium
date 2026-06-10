@@ -44,6 +44,9 @@ func (o *Ollama) Dim() int {
 	return o.dim
 }
 
+// Warm is a no-op for Ollama — see distill/ollama.go for rationale.
+func (o *Ollama) Warm(_ context.Context) error { return nil }
+
 type ollamaEmbedRequest struct {
 	Model string   `json:"model"`
 	Input []string `json:"input"`

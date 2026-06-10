@@ -13,13 +13,28 @@ export class DaemonMemoryModel implements MemoryModel {
   }
 
   async distill(exchange: Exchange): Promise<{ memories: DraftMemory[]; entities: Entity[] }> {
+    console.info(
+      "[mnemium/daemon] distill RPC →",
+      `${exchange.provider}::${exchange.threadId}`,
+      `textlen=${(exchange.userText?.length ?? 0) + (exchange.assistantText?.length ?? 0)}`,
+    );
+    const started = Date.now();
     try {
-      return await this.client.distill(exchange);
+      const result = await this.client.distill(exchange);
+      console.info(
+        "[mnemium/daemon] distill RPC ←",
+        `memories=${result.memories.length}`,
+        `entities=${result.entities.length}`,
+        `took=${Date.now() - started}ms`,
+      );
+      return result;
     } catch (error) {
+      const took = Date.now() - started;
       if (error instanceof DaemonUnavailableError) {
-        console.warn("[mnemium/daemon] distill unavailable:", error.code, error.message);
+        console.warn("[mnemium/daemon] distill unavailable:", error.code, error.message, `took=${took}ms`);
         return { memories: [], entities: [] };
       }
+      console.error("[mnemium/daemon] distill threw", error, `took=${took}ms`);
       throw error;
     }
   }

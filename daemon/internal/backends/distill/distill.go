@@ -41,4 +41,9 @@ type Backend interface {
 	Distill(ctx context.Context, ex Exchange) (memories []Memory, entities []Entity, err error)
 	Ready() bool
 	Model() string
+	// Warm pre-spawns any subprocess / pre-loads any heavy state. Called
+	// from `mnemiumd serve` after Listen so the first /distill request
+	// doesn't pay the cold-start tax. No-op for backends that don't have
+	// expensive initialization (Disabled, Ollama, OpenAI).
+	Warm(ctx context.Context) error
 }

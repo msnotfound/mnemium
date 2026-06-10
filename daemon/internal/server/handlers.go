@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"log"
 	"net/http"
 	"path"
 	"strings"
@@ -88,13 +89,19 @@ func (s *Server) handleDistill(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request", err.Error())
 		return
 	}
+	textLen := len(req.UserText) + len(req.AssistantText)
+	log.Printf("[distill] called scope=%s::%s textlen=%d", req.Provider, req.ThreadID, textLen)
 	ctx, cancel := context.WithTimeout(r.Context(), 120*time.Second)
 	defer cancel()
+	started := time.Now()
 	memories, entities, err := set.Distill.Distill(ctx, req)
+	took := time.Since(started).Round(time.Millisecond)
 	if err != nil {
+		log.Printf("[distill] FAILED took=%s err=%v", took, err)
 		writeError(w, http.StatusInternalServerError, "distill_failed", err.Error())
 		return
 	}
+	log.Printf("[distill] ok memories=%d entities=%d took=%s", len(memories), len(entities), took)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"memories": memories,
 		"entities": entities,
@@ -120,13 +127,18 @@ func (s *Server) handleEmbed(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request", err.Error())
 		return
 	}
+	log.Printf("[embed] called texts=%d", len(req.Texts))
 	ctx, cancel := context.WithTimeout(r.Context(), 120*time.Second)
 	defer cancel()
+	started := time.Now()
 	vectors, err := set.Embed.Embed(ctx, req.Texts)
+	took := time.Since(started).Round(time.Millisecond)
 	if err != nil {
+		log.Printf("[embed] FAILED took=%s err=%v", took, err)
 		writeError(w, http.StatusInternalServerError, "embed_failed", err.Error())
 		return
 	}
+	log.Printf("[embed] ok vectors=%d dim=%d took=%s", len(vectors), set.Embed.Dim(), took)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"model":   set.Embed.Model(),
 		"dim":     set.Embed.Dim(),

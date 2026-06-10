@@ -39,6 +39,11 @@ func NewOllama(endpoint, model string) (*Ollama, error) {
 func (o *Ollama) Ready() bool   { return true }
 func (o *Ollama) Model() string { return o.model }
 
+// Warm is a no-op for Ollama — the ollama server runs out-of-process and
+// is the user's responsibility to start. We don't probe at warmup time
+// to avoid spamming /api/tags on every daemon boot.
+func (o *Ollama) Warm(_ context.Context) error { return nil }
+
 type ollamaMessage struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`

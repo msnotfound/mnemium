@@ -1,5 +1,5 @@
 import { computeEagerEdges } from "./edges";
-import { salience } from "./salience";
+import { analyzeSalience } from "./salience";
 import type { Embedder, MemoryModel, MemoryRepo, VectorIndex } from "@shared/interfaces";
 import type { Chunk, Document, Edge, Entity, Exchange, Memory } from "@shared/types";
 
@@ -31,15 +31,38 @@ export class CapturePipeline {
     await this.deps.documents.insert(document);
     await this.deps.documents.insertChunks(chunks);
 
-    if (salience(ex)) {
+    // Salience filter. Casual chat (short replies, questions) gets dropped
+    // here so we don't spam the distill backend with low-value exchanges.
+    // Log the decision and reasons so the user can see why a capture
+    // didn't produce memories.
+    const decision = analyzeSalience(ex);
+    console.info(
+      "[mnemium/capture] salience",
+      decision.salient ? "PASS" : "SKIP",
+      `score=${decision.score.toFixed(2)}`,
+      `reasons=[${decision.reasons.join(",")}]`,
+    );
+    if (decision.salient) {
       queueMicrotask(() => {
-        void this.distillAndStore(ex, document, chunks).catch((error: unknown) => this.deps.onError?.(error));
+        void this.distillAndStore(ex, document, chunks).catch((error: unknown) => {
+          console.error("[mnemium/capture] distillAndStore threw", error);
+          this.deps.onError?.(error);
+        });
       });
     }
   }
 
   private async distillAndStore(ex: Exchange, document: Document, chunks: Chunk[]): Promise<void> {
+    console.info("[mnemium/capture] distilling", `${ex.provider}::${ex.threadId}`);
+    const started = Date.now();
     const result = await this.deps.memoryModel.distill(ex);
+    const took = Date.now() - started;
+    console.info(
+      "[mnemium/capture] distill result",
+      `memories=${result.memories.length}`,
+      `entities=${result.entities.length}`,
+      `took=${took}ms`,
+    );
     const memories = result.memories.map((draft, index) => memoryFromDraft(draft, ex, index, this.deps.now?.() ?? Date.now()));
     if (memories.length === 0) {
       return;

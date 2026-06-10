@@ -67,11 +67,48 @@ func New(cfg config.Config, creds pairing.Credentials, version string, paths xdg
 // new effective config.
 func (s *Server) Reconfigure(cfg config.Config) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	old := s.backends
 	s.cfg = cfg
 	s.backends = backends.Resolve(cfg, s.paths)
+	newSet := s.backends
+	s.mu.Unlock()
 	old.Close()
+	log.Printf("[reconfigure] backends now: distill=%s/%s embed=%s/%s vec=%s",
+		cfg.Backends.Distill.Kind, newSet.Distill.Model(),
+		cfg.Backends.Embed.Kind, newSet.Embed.Model(),
+		cfg.Backends.Vec.Kind)
+	// Re-warm in a goroutine so the HTTP response doesn't block on it.
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+		defer cancel()
+		s.Warm(ctx)
+	}()
+}
+
+// Warm proactively spawns subprocess-backed backends (LlamaCPP). Designed
+// to be called once from `mnemiumd serve` post-Listen and again from
+// Reconfigure when the user switches backend kinds. Logs lifecycle + any
+// per-backend errors but never returns error — best-effort.
+func (s *Server) Warm(ctx context.Context) {
+	_, set := s.snapshot()
+	if model := set.Distill.Model(); model != "" {
+		log.Printf("[warm] distill: starting (%s)", model)
+		start := time.Now()
+		if err := set.Distill.Warm(ctx); err != nil {
+			log.Printf("[warm] distill: FAILED after %s: %v", time.Since(start).Round(time.Millisecond), err)
+		} else {
+			log.Printf("[warm] distill: ready in %s", time.Since(start).Round(time.Millisecond))
+		}
+	}
+	if model := set.Embed.Model(); model != "" {
+		log.Printf("[warm] embed: starting (%s)", model)
+		start := time.Now()
+		if err := set.Embed.Warm(ctx); err != nil {
+			log.Printf("[warm] embed: FAILED after %s: %v", time.Since(start).Round(time.Millisecond), err)
+		} else {
+			log.Printf("[warm] embed: ready in %s (dim=%d)", time.Since(start).Round(time.Millisecond), set.Embed.Dim())
+		}
+	}
 }
 
 // snapshot returns a stable copy of cfg + backends for one request.

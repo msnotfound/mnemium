@@ -8,8 +8,11 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"log"
 	"os"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -18,7 +21,7 @@ import (
 	"github.com/msnotfound/mnemium/daemon/internal/server"
 )
 
-const version = "0.0.7"
+const version = "0.0.8"
 
 func main() {
 	root := &cobra.Command{
@@ -65,6 +68,17 @@ func serveCmd() *cobra.Command {
 			if err := paths.Ensure(); err != nil {
 				return fmt.Errorf("ensure paths: %w", err)
 			}
+
+			// Startup banner. Shows users (and bug reports) the resolved
+			// environment without forcing them to run `config show`.
+			log.Printf("mnemiumd %s starting", version)
+			log.Printf("paths: config=%s data=%s models=%s vectors=%s bin=%s",
+				paths.Config, paths.Data, paths.Models, paths.Vectors, paths.Bin)
+			log.Printf("backends config: distill=%s/%s embed=%s/%s vec=%s",
+				cfg.Backends.Distill.Kind, cfg.Backends.Distill.Model,
+				cfg.Backends.Embed.Kind, cfg.Backends.Embed.Model,
+				cfg.Backends.Vec.Kind)
+
 			srv, err := server.New(cfg, creds, version, paths)
 			if err != nil {
 				return fmt.Errorf("init server: %w", err)
@@ -78,6 +92,19 @@ func serveCmd() *cobra.Command {
 			if err := pairing.WritePort(bound.Port); err != nil {
 				return fmt.Errorf("write port file: %w", err)
 			}
+			log.Printf("listening on %s", bound.Addr)
+
+			// Eager warmup: spawn llama-server NOW so the first /distill
+			// request doesn't pay the 5–15s cold-start tax. Async so HTTP
+			// serving starts immediately — /status will report ready=false
+			// during the ~10–30s warmup window and flip to true once done.
+			go func() {
+				ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+				defer cancel()
+				log.Printf("[warm] kicking off backend warmup")
+				srv.Warm(ctx)
+				log.Printf("[warm] complete")
+			}()
 
 			if print {
 				fmt.Printf("mn:%d:%s\n", bound.Port, creds.Token)
