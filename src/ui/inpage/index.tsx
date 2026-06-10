@@ -1,7 +1,7 @@
 /** @jsxImportSource preact */
 import type { SurfacedChunk } from "@shared/types";
 import { render, type JSX, type VNode } from "preact";
-import { useState } from "preact/hooks";
+import { useEffect, useState } from "preact/hooks";
 
 import { acceptChunk, dismissChunk, type InjectionContext } from "../components/rpc";
 import { tokenStyle } from "../components/theme";
@@ -21,15 +21,27 @@ export function mountInPageUI(container: HTMLElement, props: InPageUIProps = {})
 function InPageMemoryBlock({ chunks = [], onInject, scopeUri, threadId, messageId }: InPageUIProps): VNode {
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState(chunks);
-  const context: InjectionContext = {
-    scopeUri: scopeUri ?? "personal::chatgpt::draft",
-    threadId: threadId ?? "current-thread",
-    messageId: messageId ?? "pending-message",
-  };
+
+  useEffect(() => {
+    setItems(chunks);
+    setOpen(chunks.length > 0);
+  }, [chunks]);
+
+  if (items.length === 0) {
+    return <div className="mnem-inpage" style={tokenStyle as unknown as JSX.CSSProperties} />;
+  }
+
+  function contextFor(item: SurfacedChunk): InjectionContext {
+    return {
+      scopeUri: scopeUri ?? item.provenance?.scopeUri ?? "personal::chatgpt",
+      threadId: threadId ?? "unknown",
+      messageId: messageId ?? item.memoryId,
+    };
+  }
 
   async function accept(item: SurfacedChunk): Promise<void> {
     await onInject?.(item.content);
-    await acceptChunk(item, context);
+    await acceptChunk(item, contextFor(item));
     setItems((current) => current.filter((chunk) => chunk.memoryId !== item.memoryId));
   }
 

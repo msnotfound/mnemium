@@ -1,7 +1,8 @@
 import type { SiteAdapter } from "@/shared/interfaces";
 import { createSiteAdapter } from "@/adapters/factory";
-import type { NetworkCaptureConfig } from "@/adapters/strategies/network";
+import type { NetworkCaptureConfig, NetworkPayload } from "@/adapters/strategies/network";
 import { createGenericProviderParser } from "@/adapters/strategies/network";
+import type { Exchange } from "@/shared/types";
 
 export const chatgptAdapter: SiteAdapter = createSiteAdapter({
   provider: "chatgpt",
@@ -23,10 +24,43 @@ export const chatgptAdapter: SiteAdapter = createSiteAdapter({
 export const chatgptNetworkConfig: NetworkCaptureConfig = {
   provider: "chatgpt",
   urlPatterns: [
-    /chatgpt\.com\/backend-api\/conversation/,
-    /chat\.openai\.com\/backend-api\/conversation/,
-    /chatgpt\.com\/backend-api\/f\/conversation/,
-    /chat\.openai\.com\/backend-api\/f\/conversation/,
+    /chatgpt\.com\/backend-api\/(?:f\/)?conversation(?:[/?#]|$)/,
+    /chat\.openai\.com\/backend-api\/(?:f\/)?conversation(?:[/?#]|$)/,
   ],
-  parse: createGenericProviderParser("chatgpt"),
+  parse: parseChatGptNetworkPayload,
 };
+
+const genericChatGptParser = createGenericProviderParser("chatgpt");
+
+function parseChatGptNetworkPayload(payload: NetworkPayload): Exchange[] {
+  if (payload.method.toUpperCase() === "GET" || !isConversationTurnUrl(payload.url)) {
+    return [];
+  }
+
+  const activeThreadId = currentThreadIdFromLocation();
+  return genericChatGptParser(payload).filter((exchange) => {
+    if (!isLikelyChatGptThreadId(exchange.threadId)) {
+      return false;
+    }
+
+    return activeThreadId === undefined || activeThreadId === exchange.threadId;
+  });
+}
+
+function isConversationTurnUrl(url: string): boolean {
+  try {
+    const { pathname } = new URL(url, location.origin);
+    return /^\/backend-api\/(?:f\/)?conversation(?:\/|$)/.test(pathname);
+  } catch {
+    return false;
+  }
+}
+
+function currentThreadIdFromLocation(): string | undefined {
+  const active = /\/c\/([A-Za-z0-9_-]{8,})/.exec(location.pathname)?.[1];
+  return active !== undefined && isLikelyChatGptThreadId(active) ? active : undefined;
+}
+
+function isLikelyChatGptThreadId(threadId: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(threadId);
+}

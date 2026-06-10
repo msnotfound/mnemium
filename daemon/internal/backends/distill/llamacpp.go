@@ -225,6 +225,7 @@ func (l *LlamaCPP) Distill(ctx context.Context, ex Exchange) ([]Memory, []Entity
 			{Role: "system", Content: SystemPrompt},
 			{Role: "user", Content: BuildUserPrompt(ex)},
 		},
+		ResponseFormat: &openaiFormat{Type: "json_object"},
 	}
 	body, err := json.Marshal(reqBody)
 	if err != nil {

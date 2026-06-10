@@ -15,7 +15,7 @@ Schema:
 {
   "memories": [
     {
-      "type": "preference|fact|skill|goal|constraint|context",
+      "type": "fact",
       "content": "<one sentence stated in third person about the user>",
       "isStatic": <true if always-true biographical fact, false if temporary state>,
       "isInference": <true if you inferred it, false if user stated it>,
@@ -31,6 +31,7 @@ Schema:
 Rules:
 - Skip greetings, meta-talk, anything not durable.
 - "the user" is always the speaker of USER messages.
+- For memory.type, choose exactly one of: fact, preference, episode, task, identity.
 - If nothing durable is present, return {"memories":[],"entities":[]}.
 - Output ONLY the JSON object. No explanation, no fences.`
 
@@ -89,9 +90,9 @@ func ParseResponse(raw string, scopeURI string) ([]Memory, []Entity, error) {
 		if content == "" {
 			continue
 		}
-		typ := m.Type
-		if typ == "" {
-			typ = "fact"
+		typ := strings.TrimSpace(m.Type)
+		if !validMemoryType(typ) {
+			continue
 		}
 		confidence := m.Confidence
 		if confidence < 0 {
@@ -134,6 +135,15 @@ func ParseResponse(raw string, scopeURI string) ([]Memory, []Entity, error) {
 	}
 
 	return mems, ents, nil
+}
+
+func validMemoryType(typ string) bool {
+	switch typ {
+	case "fact", "preference", "episode", "task", "identity":
+		return true
+	default:
+		return false
+	}
 }
 
 // extractJSONObject finds the first balanced {...} block in s. Handles

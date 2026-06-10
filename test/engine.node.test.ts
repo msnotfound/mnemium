@@ -49,6 +49,42 @@ describe("engine core", () => {
     expect(result.candidates[0]?.denseScore).toBeGreaterThan(0);
   });
 
+  test("provider-wide retrieval includes other threads and boosts the current thread", async () => {
+    const docs = createDocumentRepo(db);
+    const memories = createMemoryRepo(db);
+    const vectors = createVectorIndex(db);
+    const embedder = new FakeEmbedder();
+    const now = Date.now();
+    const currentScope = "personal::chatgpt::thread-b";
+
+    await docs.insert(doc("doc-a", "personal::chatgpt::thread-a", now, "Old poha preference"));
+    await docs.insert(doc("doc-b", currentScope, now, "Current poha preference"));
+    await docs.insertChunks([
+      { id: "chunk-a", documentId: "doc-a", ord: 0, text: "Prefers poha for breakfast" },
+      { id: "chunk-b", documentId: "doc-b", ord: 0, text: "Prefers poha for breakfast" },
+    ]);
+
+    await memories.upsert(memory("m-a", "preference", "Prefers poha for breakfast", now, "personal::chatgpt::thread-a"));
+    await memories.upsert(memory("m-b", "preference", "Prefers poha for breakfast", now, currentScope));
+    await memories.linkSource({ memoryId: "m-a", chunkId: "chunk-a", documentId: "doc-a", relevance: 1 });
+    await memories.linkSource({ memoryId: "m-b", chunkId: "chunk-b", documentId: "doc-b", relevance: 1 });
+    await vectors.upsert(MODEL_ID, [
+      { id: "m-a", vec: embedder.vectorFor("poha breakfast") },
+      { id: "m-b", vec: embedder.vectorFor("poha breakfast") },
+    ]);
+
+    const result = await hybridSearchWithCandidates(db, vectors, embedder, "poha breakfast", {
+      scopePrefix: "personal::chatgpt",
+      currentScopePrefix: currentScope,
+      type: ["preference"],
+      k: 2,
+    });
+
+    expect(result.chunks.map((chunk) => chunk.memoryId)).toEqual(["m-b", "m-a"]);
+    expect(result.chunks[0]?.provenance).toEqual({ scopeUri: currentScope, sameThread: true });
+    expect(result.chunks[1]?.provenance).toEqual({ scopeUri: "personal::chatgpt::thread-a", sameThread: false });
+  });
+
   test("supersede flips old memory latest flag and advances the version chain", async () => {
     const repo = createMemoryRepo(db);
     const now = Date.now();
@@ -132,12 +168,18 @@ function doc(id: string, scopeUri: string, capturedAt: number, rawContent: strin
   };
 }
 
-function memory(id: string, type: Memory["type"], content: string, createdAt: number): Memory {
+function memory(
+  id: string,
+  type: Memory["type"],
+  content: string,
+  createdAt: number,
+  scopeUri = "personal::chatgpt::thread-a",
+): Memory {
   return {
     id,
     type,
     content,
-    scopeUri: "personal::chatgpt::thread-a",
+    scopeUri,
     version: 1,
     isLatest: true,
     isStatic: type !== "task",

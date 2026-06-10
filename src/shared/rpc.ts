@@ -8,7 +8,7 @@ export type Rpc =
   // capture → engine (persist + maybe distill)
   | { t: "capture.exchange"; payload: Exchange }
   // retrieval (content → engine → content)
-  | { t: "retrieve"; draft: string; scope: string; k: number }
+  | { t: "retrieve"; draft: string; scope: string; currentScope?: string; k: number }
   | { t: "retrieve.result"; reqId: string; chunks: SurfacedChunk[] }
   // ✓/✖ per-chunk feedback → bandit
   | { t: "inject.feedback"; memoryId: string; accepted: boolean; ctx: BanditFeatures }
