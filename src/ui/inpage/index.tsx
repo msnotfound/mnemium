@@ -67,6 +67,7 @@ function InPageMemoryBlock({ chunks = [], onInject, scopeUri, threadId, messageI
                 <span>
                   <b>{item.content}</b>
                   <small>from {item.sourceLabel}</small>
+                  <small className="reason">{matchReasonLine(item)}{evidenceLink(item)}</small>
                 </span>
                 <span className="actions">
                   <button onClick={() => void accept(item)} type="button" title="Inject this chunk">
@@ -86,6 +87,33 @@ function InPageMemoryBlock({ chunks = [], onInject, scopeUri, threadId, messageI
         Memory <kbd>Alt+⇧+M</kbd>
       </button>
     </div>
+  );
+}
+
+/** "preference · 0.82 semantic · same thread" — why this memory appeared.
+ *  Parts are omitted when unknown (e.g. no matchKind on legacy responses). */
+function matchReasonLine(item: SurfacedChunk): string {
+  const parts: string[] = [item.type];
+  if (item.matchKind !== undefined && item.matchScore !== undefined) {
+    parts.push(`${item.matchScore.toFixed(2)} ${item.matchKind}`);
+  }
+  if (item.provenance !== undefined) {
+    parts.push(item.provenance.sameThread ? "same thread" : "another thread");
+  }
+  return parts.join(" · ");
+}
+
+/** Native-title hover keeps this dependency-free: hovering "view evidence"
+ *  shows the verbatim source quote the memory was extracted from. */
+function evidenceLink(item: SurfacedChunk): VNode | null {
+  if (item.evidence === undefined || item.evidence.length === 0) {
+    return null;
+  }
+  return (
+    <span className="evidence" title={`“${item.evidence}”`}>
+      {" · "}
+      <u>view evidence</u>
+    </span>
   );
 }
 
@@ -222,6 +250,22 @@ button {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.chunk small.reason {
+  font-family: var(--mnem-font-mono);
+  font-size: 10px;
+  margin-top: 2px;
+  opacity: 0.8;
+}
+
+.chunk .evidence {
+  cursor: help;
+}
+
+.chunk .evidence u {
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
 }
 
 .actions {

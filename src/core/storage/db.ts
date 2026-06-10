@@ -41,8 +41,35 @@ interface SqliteVecLoader {
 
 type WasmBindValue = SqlValue | readonly SqlValue[];
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 const schemaUrl = new URL("./schema.sql", import.meta.url);
+
+/** v1 → v2: trust fields on memory + the validator audit table.
+ *  ALTER TABLE ADD COLUMN is instant in SQLite (no table rewrite); existing
+ *  rows get claim_status='active' via the column default, which is the
+ *  correct grandfathering — pre-trust-loop memories stay retrievable. */
+const MIGRATE_V1_TO_V2 = `
+ALTER TABLE memory ADD COLUMN evidence TEXT;
+ALTER TABLE memory ADD COLUMN speaker TEXT;
+ALTER TABLE memory ADD COLUMN support_kind TEXT;
+ALTER TABLE memory ADD COLUMN claim_status TEXT NOT NULL DEFAULT 'active';
+CREATE INDEX IF NOT EXISTS idx_memory_claim ON memory(claim_status);
+CREATE TABLE IF NOT EXISTS memory_rejection (
+  id           TEXT PRIMARY KEY,
+  scope_uri    TEXT NOT NULL,
+  provider     TEXT,
+  thread_id    TEXT,
+  message_id   TEXT,
+  type         TEXT,
+  content      TEXT NOT NULL,
+  evidence     TEXT,
+  speaker      TEXT,
+  support_kind TEXT,
+  reason       TEXT NOT NULL,
+  created_at   INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_rejection_scope ON memory_rejection(scope_uri, created_at);
+`;
 
 export async function openNode(path = ":memory:"): Promise<Database> {
   const require = await nodeRequire();
@@ -72,7 +99,11 @@ export async function initialize(db: Database, schemaSql: string): Promise<void>
     throw new Error(`Database schema version ${version} is newer than supported ${SCHEMA_VERSION}`);
   }
   if (version < 1) {
+    // Fresh database — schema.sql is always the CURRENT shape (v2 columns
+    // included), so no incremental migrations run after it.
     await db.exec(schemaSql);
+  } else if (version < 2) {
+    await db.exec(MIGRATE_V1_TO_V2);
   }
   await db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
 }

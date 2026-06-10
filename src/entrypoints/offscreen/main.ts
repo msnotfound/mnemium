@@ -519,6 +519,9 @@ async function retrieveChunks(
       type: memory.type,
       sourceLabel: sourceLabelFor(memory.scopeUri, memory.createdAt, currentScopePrefix),
       score: memory.confidence + (currentScopePrefix !== undefined && memory.scopeUri.startsWith(currentScopePrefix) ? 0.08 : 0),
+      matchKind: "lexical" as const,
+      matchScore: memory.confidence,
+      evidence: memory.evidence,
       provenance: {
         scopeUri: memory.scopeUri,
         sameThread: currentScopePrefix !== undefined && memory.scopeUri.startsWith(currentScopePrefix),

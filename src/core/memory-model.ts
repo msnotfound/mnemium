@@ -1,6 +1,17 @@
 import type { Config } from "@shared/config";
 import type { MemoryModel as MemoryModelContract } from "@shared/interfaces";
-import { isMemoryType, type DraftMemory, type Edge, type Entity, type Exchange, type Memory, type MemoryType } from "@shared/types";
+import {
+  isMemoryType,
+  isSpeaker,
+  isSupportKind,
+  type DraftMemory,
+  type Edge,
+  type Entity,
+  type Exchange,
+  type Memory,
+  type MemoryType,
+  type Speaker,
+} from "@shared/types";
 
 interface ChatMessage {
   role: "system" | "user";
@@ -95,27 +106,41 @@ export class ApiKeyMemoryModel implements MemoryModelContract {
 
 export function heuristicDistill(ex: Exchange): { memories: DraftMemory[]; entities: Entity[] } {
   const scopeUri = scopeForExchange(ex);
-  const text = stripMarkdown(`${ex.userText}\n${ex.assistantText}`);
-  const entities = extractEntities(text, scopeUri);
-  const sentences = text
-    .split(/(?<=[.!?])\s+|\n+/)
-    .map((sentence) => sentence.trim())
-    .filter((sentence) => sentence.length >= 24 && sentence.length <= 500)
-    .filter((sentence) => /[a-z]/i.test(sentence))
-    .slice(0, 6);
-  const memories = sentences
-    .map((sentence): DraftMemory => ({
-      type: inferType(sentence),
-      content: sentence.replace(/\s+/g, " "),
-      isStatic: inferType(sentence) !== "task" && !/\b(now|currently|today|this week|latest)\b/i.test(sentence),
-      isInference: false,
-      confidence: 0.45,
-      entities: entities
-        .filter((entity) => sentence.toLowerCase().includes(entity.name.toLowerCase()))
-        .map((entity) => entity.normalizedName),
-    }))
-    .filter((memory) => memory.content.length > 0);
-  return { memories, entities };
+  const combined = stripMarkdown(`${ex.userText}\n${ex.assistantText}`);
+  const entities = extractEntities(combined, scopeUri);
+  // Process user and assistant text separately so each candidate carries a
+  // correct speaker. Evidence must be a verbatim span of the RAW source —
+  // sentences mangled by markdown stripping are dropped rather than emitted
+  // ungrounded (the validator would reject them anyway).
+  const sources: Array<{ speaker: Speaker; raw: string }> = [
+    { speaker: "user", raw: ex.userText },
+    { speaker: "assistant", raw: ex.assistantText },
+  ];
+  const memories: DraftMemory[] = [];
+  for (const source of sources) {
+    const sentences = stripMarkdown(source.raw)
+      .split(/(?<=[.!?])\s+|\n+/)
+      .map((sentence) => sentence.trim())
+      .filter((sentence) => sentence.length >= 24 && sentence.length <= 500)
+      .filter((sentence) => /[a-z]/i.test(sentence))
+      .filter((sentence) => source.raw.toLowerCase().includes(sentence.toLowerCase()));
+    for (const sentence of sentences) {
+      memories.push({
+        type: inferType(sentence),
+        content: sentence.replace(/\s+/g, " "),
+        evidence: sentence,
+        speaker: source.speaker,
+        supportKind: "exact",
+        isStatic: inferType(sentence) !== "task" && !/\b(now|currently|today|this week|latest)\b/i.test(sentence),
+        isInference: false,
+        confidence: 0.45,
+        entities: entities
+          .filter((entity) => sentence.toLowerCase().includes(entity.name.toLowerCase()))
+          .map((entity) => entity.normalizedName),
+      });
+    }
+  }
+  return { memories: memories.slice(0, 6), entities };
 }
 
 /** Lightweight markdown stripper so sentence-splitting doesn't get confused by
@@ -142,7 +167,7 @@ function distillMessages(ex: Exchange): ChatMessage[] {
     {
       role: "system",
       content:
-        "Extract atomic durable memories from this chat turn. Resolve coreferences. Return only JSON with memories and entities. memories items require type, content, isStatic, confidence, entities. types: fact, preference, episode, task, identity.",
+        "Extract atomic durable memories from this chat turn. Resolve coreferences. Return only JSON with memories and entities. memories items require type, content, evidence, speaker, supportKind, isStatic, confidence, entities. types: fact, preference, episode, task, identity. evidence is an EXACT verbatim quote copied from the User or Assistant text that supports the claim; speaker is user|assistant (who wrote the evidence); supportKind is exact|paraphrase|inferred. Memories whose evidence is not found verbatim in the source are discarded. Never turn assistant suggestions or hypotheticals into user facts.",
     },
     {
       role: "user",
@@ -227,15 +252,22 @@ function sanitizeMemories(memories: DraftMemory[]): DraftMemory[] {
   return memories
     .filter((memory) => typeof memory.content === "string" && memory.content.trim().length > 0)
     .filter((memory) => isMemoryType(String(memory.type)))
-    .map((memory) => ({
-      type: memory.type,
-      content: memory.content.trim(),
-      isStatic: Boolean(memory.isStatic),
-      isInference: Boolean(memory.isInference),
-      confidence: clamp01(memory.confidence ?? 0.7),
-      entities: (memory.entities ?? []).map(normalizeEntity),
-      eventDate: memory.eventDate,
-    }));
+    .map((memory) => {
+      const speaker = String(memory.speaker ?? "").trim().toLowerCase();
+      const supportKind = String(memory.supportKind ?? "").trim().toLowerCase();
+      return {
+        type: memory.type,
+        content: memory.content.trim(),
+        evidence: typeof memory.evidence === "string" ? memory.evidence.trim() : undefined,
+        speaker: isSpeaker(speaker) ? speaker : undefined,
+        supportKind: isSupportKind(supportKind) ? supportKind : undefined,
+        isStatic: Boolean(memory.isStatic),
+        isInference: Boolean(memory.isInference),
+        confidence: clamp01(memory.confidence ?? 0.7),
+        entities: (memory.entities ?? []).map(normalizeEntity),
+        eventDate: memory.eventDate,
+      };
+    });
 }
 
 function extractEntities(text: string, scopeUri: string): Entity[] {

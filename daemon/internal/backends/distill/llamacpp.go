@@ -218,6 +218,11 @@ func (l *LlamaCPP) Distill(ctx context.Context, ex Exchange) ([]Memory, []Entity
 	port := l.port
 	l.mu.Unlock()
 
+	// GBNF grammar instead of response_format: json_object only guarantees
+	// valid JSON, not our schema. The grammar pins field order and the
+	// type/speaker/supportKind enums, which a 1.5B model won't reliably
+	// honor from the prompt alone. Don't send both — llama-server treats
+	// response_format as its own grammar and the two would conflict.
 	reqBody := openaiChatRequest{
 		Model:       "local",
 		Temperature: 0.2,
@@ -225,7 +230,7 @@ func (l *LlamaCPP) Distill(ctx context.Context, ex Exchange) ([]Memory, []Entity
 			{Role: "system", Content: SystemPrompt},
 			{Role: "user", Content: BuildUserPrompt(ex)},
 		},
-		ResponseFormat: &openaiFormat{Type: "json_object"},
+		Grammar: Grammar,
 	}
 	body, err := json.Marshal(reqBody)
 	if err != nil {

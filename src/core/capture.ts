@@ -1,7 +1,8 @@
 import { computeEagerEdges } from "./edges";
 import { analyzeSalience } from "./salience";
+import { validateDraft } from "./validate";
 import type { Embedder, MemoryModel, MemoryRepo, VectorIndex } from "@shared/interfaces";
-import { isMemoryType, type Chunk, type Document, type Edge, type Entity, type Exchange, type Memory } from "@shared/types";
+import type { Chunk, ClaimStatus, Document, DraftMemory, Edge, Entity, Exchange, Memory } from "@shared/types";
 
 export interface CapturePipelineDeps {
   documents: {
@@ -63,14 +64,45 @@ export class CapturePipeline {
       `entities=${result.entities.length}`,
       `took=${took}ms`,
     );
-    const drafts = result.memories.filter((draft) => isMemoryType(String(draft.type)));
-    if (drafts.length !== result.memories.length) {
-      console.warn(
-        "[mnemium/capture] dropped invalid memory types",
-        `dropped=${result.memories.length - drafts.length}`,
+    // Trust gate: every candidate runs through the deterministic validator.
+    // Valid claims become memory rows; dropped ones are logged AND persisted
+    // to memory_rejection so the user can audit what the model tried to claim.
+    const source = { userText: ex.userText, assistantText: ex.assistantText };
+    const accepted: Array<{ draft: DraftMemory; index: number; claimStatus: ClaimStatus }> = [];
+    for (let index = 0; index < result.memories.length; index += 1) {
+      const draft = result.memories[index];
+      if (draft === undefined) continue;
+      const verdict = validateDraft(draft, source);
+      if (verdict.ok) {
+        accepted.push({ draft, index, claimStatus: verdict.claimStatus });
+        continue;
+      }
+      console.warn(`[mnemium/validate] dropped ${verdict.reason}`, JSON.stringify(draft.content));
+      await this.deps.memories.recordRejection({
+        id: `rej:${ex.provider}:${ex.threadId}:${ex.messageId}:${index}`,
+        scopeUri: document.scopeUri,
+        provider: ex.provider,
+        threadId: ex.threadId,
+        messageId: ex.messageId,
+        type: String(draft.type),
+        content: draft.content,
+        evidence: draft.evidence,
+        speaker: draft.speaker,
+        supportKind: draft.supportKind,
+        reason: verdict.reason,
+        createdAt: this.deps.now?.() ?? Date.now(),
+      });
+    }
+    if (accepted.length !== result.memories.length) {
+      console.info(
+        "[mnemium/validate] gate result",
+        `accepted=${accepted.length}`,
+        `rejected=${result.memories.length - accepted.length}`,
       );
     }
-    const memories = drafts.map((draft, index) => memoryFromDraft(draft, ex, index, this.deps.now?.() ?? Date.now()));
+    const memories = accepted.map(({ draft, index, claimStatus }) =>
+      memoryFromDraft(draft, ex, index, this.deps.now?.() ?? Date.now(), claimStatus),
+    );
     if (memories.length === 0) {
       return;
     }
@@ -147,17 +179,11 @@ function chunksForExchange(ex: Exchange, documentId: string): Chunk[] {
 }
 
 function memoryFromDraft(
-  draft: {
-    type: Memory["type"];
-    content: string;
-    isStatic: boolean;
-    isInference?: boolean;
-    confidence?: number;
-    eventDate?: number;
-  },
+  draft: DraftMemory,
   ex: Exchange,
   index: number,
   now: number,
+  claimStatus: ClaimStatus,
 ): Memory {
   return {
     id: `mem:${ex.provider}:${ex.threadId}:${ex.messageId}:${index}`,
@@ -166,9 +192,13 @@ function memoryFromDraft(
     scopeUri: scopeForExchange(ex),
     version: 1,
     isLatest: true,
-    isStatic: draft.isStatic,
+    isStatic: draft.isStatic ?? (draft.type !== "task" && draft.type !== "episode"),
     isInference: draft.isInference ?? false,
     confidence: draft.confidence ?? 0.7,
+    evidence: draft.evidence,
+    speaker: draft.speaker,
+    supportKind: draft.supportKind,
+    claimStatus,
     eventDate: draft.eventDate,
     documentDate: ex.ts,
     isForgotten: false,
