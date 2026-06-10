@@ -79,10 +79,10 @@ func (s *Server) handleDistill(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_, set := s.snapshot()
-	if !set.Distill.Ready() {
-		backendUnavailable(w, "distill backend is not configured or not yet started")
-		return
-	}
+	// Don't gate on Ready(). LlamaCPP backends start lazily on first call
+	// (ensureStarted inside Distill spawns llama-server and flips Ready=true).
+	// If we 503 here when Ready=false, the first call always fails and the
+	// process never spawns — chicken-and-egg. Disabled returns empty silently.
 	var req distill.Exchange
 	if err := readJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, "bad_request", err.Error())
@@ -113,10 +113,8 @@ func (s *Server) handleEmbed(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_, set := s.snapshot()
-	if !set.Embed.Ready() {
-		backendUnavailable(w, "embed backend is not configured")
-		return
-	}
+	// Same as /distill: don't gate on Ready(). LlamaCPP embed lazy-spawns
+	// on first call. Disabled returns empty silently.
 	var req embedRequest
 	if err := readJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, "bad_request", err.Error())

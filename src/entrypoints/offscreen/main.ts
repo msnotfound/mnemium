@@ -310,10 +310,16 @@ function resolveMemoryModel(
   status: DaemonStatus | null,
 ): MemoryModel {
   const distill = config.backends.distill;
-  if (distill.kind === "daemon" && daemon !== null && status?.backends.distill.ready === true) {
-    return new DaemonMemoryModel(daemon, status.backends.distill.model ?? "daemon");
+  // Use DaemonMemoryModel whenever distill is daemon + paired. Don't gate on
+  // status.backends.distill.ready — the daemon's llama-cpp backend lazy-spawns
+  // llama-server on first distill call. If we wait for ready=true here, we
+  // snapshot Disabled at engine boot and the daemon never gets called →
+  // ready never flips → engine stays Disabled forever (v0.0.6 bug).
+  if (distill.kind === "daemon" && daemon !== null) {
+    const modelLabel = status?.backends.distill.model ?? "daemon";
+    return new DaemonMemoryModel(daemon, modelLabel);
   }
-  // ollama / apiKey / disabled (and daemon-unavailable) handled by createMemoryModel.
+  // ollama / apiKey / disabled handled by createMemoryModel.
   return createMemoryModel(distill);
 }
 
@@ -323,17 +329,13 @@ function resolveEmbedder(
   status: DaemonStatus | null,
 ): Embedder {
   const embed = config.backends.embed;
-  if (
-    embed.kind === "daemon" &&
-    daemon !== null &&
-    status?.backends.embed.ready === true &&
-    typeof status.backends.embed.dim === "number"
-  ) {
-    return new DaemonEmbedder(
-      daemon,
-      status.backends.embed.model ?? "daemon",
-      status.backends.embed.dim,
-    );
+  // Same lazy-spawn principle as resolveMemoryModel. If we have the dim from
+  // a previous status probe, use it; otherwise default to 768 (nomic-embed)
+  // and let the first /embed call surface any real mismatch.
+  if (embed.kind === "daemon" && daemon !== null) {
+    const dim = typeof status?.backends.embed.dim === "number" ? status.backends.embed.dim : 768;
+    const modelLabel = status?.backends.embed.model ?? "daemon";
+    return new DaemonEmbedder(daemon, modelLabel, dim);
   }
   // ollama / apiKey embedders are TODO; for now fall back to disabled.
   return disabledEmbedder;
