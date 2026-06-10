@@ -4,7 +4,12 @@
 export type Provider = "chatgpt" | "claude" | "gemini" | "grok" | "deepseek";
 
 /** Typed memory states (richer than Supermemory's 3-relation model). */
-export type MemoryType = "fact" | "preference" | "episode" | "task" | "identity";
+export const MEMORY_TYPES = ["fact", "preference", "episode", "task", "identity"] as const;
+export type MemoryType = (typeof MEMORY_TYPES)[number];
+
+export function isMemoryType(value: string): value is MemoryType {
+  return (MEMORY_TYPES as readonly string[]).includes(value);
+}
 
 /**
  * Typed edges. Free (eager, no LLM): about, co_occurs, supersedes(eager guess).
@@ -131,6 +136,10 @@ export interface SurfacedChunk {
   type: MemoryType;
   sourceLabel: string; // "Claude · 3d"
   score: number;
+  provenance?: {
+    scopeUri: string;
+    sameThread: boolean;
+  };
 }
 
 /** Feature vector for the contextual-bandit inject/skip decision. */

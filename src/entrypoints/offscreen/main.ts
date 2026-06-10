@@ -75,7 +75,7 @@ serve(
       return handleCaptureExchange(msg);
     },
     retrieve: async (msg) => {
-      console.info("[mnemium/off] retrieve", msg.scope, "k=", msg.k);
+      console.info("[mnemium/off] retrieve", msg.scope, "current=", msg.currentScope ?? "(none)", "k=", msg.k);
       return handleRetrieve(msg);
     },
     "inject.feedback": async (msg) => handleInjectFeedback(msg),
@@ -392,7 +392,7 @@ async function handleRetrieve(msg: Extract<Rpc, { t: "retrieve" }>): Promise<{ c
     return { chunks: [] };
   }
 
-  const chunks = await retrieveChunks(runtime, query, msg.scope, msg.k);
+  const chunks = await retrieveChunks(runtime, query, msg.scope, msg.currentScope, msg.k);
   return { chunks };
 }
 
@@ -498,34 +498,43 @@ async function retrieveChunks(
   runtime: RuntimeEngine,
   query: string,
   scopePrefix: string,
+  currentScopePrefix: string | undefined,
   k: number,
 ): Promise<SurfacedChunk[]> {
   // Hybrid path when both embedder and vector index are real (daemon paired).
   // Falls through to FTS5 on any failure so the loop stays usable.
   if (runtime.embedder.dim > 0) {
     try {
-      const hits = await runtime.retriever.hybridSearch(query, { scopePrefix, k });
+      const hits = await runtime.retriever.hybridSearch(query, { scopePrefix, currentScopePrefix, k });
       if (hits.length > 0) return hits;
     } catch (error) {
       console.warn("[mnemium/off] hybrid search failed; falling back to FTS", error);
     }
   }
-  const memories = await runtime.memories.search(query, { scopePrefix, k });
-  return memories.map((memory) => ({
-    memoryId: memory.id,
-    content: memory.content,
-    type: memory.type,
-    sourceLabel: sourceLabelFor(memory.scopeUri, memory.createdAt),
-    score: memory.confidence,
-  }));
+  const memories = await runtime.memories.search(query, { scopePrefix, k: k * 3 });
+  return memories
+    .map((memory) => ({
+      memoryId: memory.id,
+      content: memory.content,
+      type: memory.type,
+      sourceLabel: sourceLabelFor(memory.scopeUri, memory.createdAt, currentScopePrefix),
+      score: memory.confidence + (currentScopePrefix !== undefined && memory.scopeUri.startsWith(currentScopePrefix) ? 0.08 : 0),
+      provenance: {
+        scopeUri: memory.scopeUri,
+        sameThread: currentScopePrefix !== undefined && memory.scopeUri.startsWith(currentScopePrefix),
+      },
+    }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, k);
 }
 
-function sourceLabelFor(scopeUri: string, createdAt: number): string {
+function sourceLabelFor(scopeUri: string, createdAt: number, currentScopePrefix?: string): string {
   const provider = scopeUri.split("::")[1] ?? "local";
   const capitalized = `${provider[0]?.toUpperCase() ?? "L"}${provider.slice(1)}`;
   const days = Math.max(0, Math.round((Date.now() - createdAt) / 86400000));
   const age = days === 0 ? "today" : days === 1 ? "1d" : days < 7 ? `${days}d` : `${Math.round(days / 7)}w`;
-  return `${capitalized} · ${age}`;
+  const thread = currentScopePrefix !== undefined && !scopeUri.startsWith(currentScopePrefix) ? " · another thread" : "";
+  return `${capitalized} · ${age}${thread}`;
 }
 
 async function persistExchange(runtime: Database, exchange: Exchange): Promise<void> {

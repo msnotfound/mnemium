@@ -1,6 +1,6 @@
 import type { Config } from "@shared/config";
 import type { MemoryModel as MemoryModelContract } from "@shared/interfaces";
-import type { DraftMemory, Edge, Entity, Exchange, Memory, MemoryType } from "@shared/types";
+import { isMemoryType, type DraftMemory, type Edge, type Entity, type Exchange, type Memory, type MemoryType } from "@shared/types";
 
 interface ChatMessage {
   role: "system" | "user";
@@ -226,8 +226,9 @@ function safeJson(text: string): DistillJson | undefined {
 function sanitizeMemories(memories: DraftMemory[]): DraftMemory[] {
   return memories
     .filter((memory) => typeof memory.content === "string" && memory.content.trim().length > 0)
+    .filter((memory) => isMemoryType(String(memory.type)))
     .map((memory) => ({
-      type: validType(memory.type) ? memory.type : "fact",
+      type: memory.type,
       content: memory.content.trim(),
       isStatic: Boolean(memory.isStatic),
       isInference: Boolean(memory.isInference),
@@ -254,10 +255,6 @@ function inferType(sentence: string): MemoryType {
   if (/\b(i am|my name|we are|lives? in|works? at)\b/i.test(sentence)) return "identity";
   if (/\b(yesterday|today|last week|met|went|did)\b/i.test(sentence)) return "episode";
   return "fact";
-}
-
-function validType(type: string): type is MemoryType {
-  return ["fact", "preference", "episode", "task", "identity"].includes(type);
 }
 
 function scopeForExchange(ex: Exchange): string {

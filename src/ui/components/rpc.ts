@@ -201,7 +201,7 @@ export async function acceptChunk(chunk: SurfacedChunk, context: InjectionContex
       reuseCount: 0,
       confidence: Math.min(1, Math.max(0, chunk.score)),
       type: chunk.type,
-      scopeMatch: 1,
+      scopeMatch: chunk.provenance?.sameThread === false ? 0 : 1,
     },
   });
   await sendRpc({
@@ -230,7 +230,7 @@ export async function dismissChunk(chunk: SurfacedChunk): Promise<void> {
       reuseCount: 0,
       confidence: Math.min(1, Math.max(0, chunk.score)),
       type: chunk.type,
-      scopeMatch: 1,
+      scopeMatch: chunk.provenance?.sameThread === false ? 0 : 1,
     },
   });
 }

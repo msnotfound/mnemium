@@ -1,7 +1,7 @@
 import { computeEagerEdges } from "./edges";
 import { analyzeSalience } from "./salience";
 import type { Embedder, MemoryModel, MemoryRepo, VectorIndex } from "@shared/interfaces";
-import type { Chunk, Document, Edge, Entity, Exchange, Memory } from "@shared/types";
+import { isMemoryType, type Chunk, type Document, type Edge, type Entity, type Exchange, type Memory } from "@shared/types";
 
 export interface CapturePipelineDeps {
   documents: {
@@ -63,7 +63,14 @@ export class CapturePipeline {
       `entities=${result.entities.length}`,
       `took=${took}ms`,
     );
-    const memories = result.memories.map((draft, index) => memoryFromDraft(draft, ex, index, this.deps.now?.() ?? Date.now()));
+    const drafts = result.memories.filter((draft) => isMemoryType(String(draft.type)));
+    if (drafts.length !== result.memories.length) {
+      console.warn(
+        "[mnemium/capture] dropped invalid memory types",
+        `dropped=${result.memories.length - drafts.length}`,
+      );
+    }
+    const memories = drafts.map((draft, index) => memoryFromDraft(draft, ex, index, this.deps.now?.() ?? Date.now()));
     if (memories.length === 0) {
       return;
     }

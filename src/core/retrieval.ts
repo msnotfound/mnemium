@@ -4,6 +4,7 @@ import type { MemoryType, Provider, SurfacedChunk } from "@shared/types";
 
 export interface HybridSearchOptions {
   scopePrefix?: string;
+  currentScopePrefix?: string;
   type?: MemoryType[];
   k: number;
 }
@@ -45,9 +46,10 @@ export class HybridRetriever {
       type: opts.type,
     });
     const lexical = await this.lexicalSearch(query, opts, opts.k * 3);
-    const candidates = mergeCandidates(dense, lexical).slice(0, opts.k);
-    const chunks = await this.fetchSurfaced(candidates);
-    return { chunks, candidates };
+    const candidates = await this.applyCurrentScopeBonus(mergeCandidates(dense, lexical), opts.currentScopePrefix);
+    const topCandidates = candidates.slice(0, opts.k);
+    const chunks = await this.fetchSurfaced(topCandidates, opts.currentScopePrefix);
+    return { chunks, candidates: topCandidates };
   }
 
   private async lexicalSearch(
@@ -78,7 +80,7 @@ export class HybridRetriever {
     return normalizeLexicalRows(rows);
   }
 
-  private async fetchSurfaced(candidates: ScoredCandidate[]): Promise<SurfacedChunk[]> {
+  private async fetchSurfaced(candidates: ScoredCandidate[], currentScopePrefix?: string): Promise<SurfacedChunk[]> {
     if (candidates.length === 0) {
       return [];
     }
@@ -89,6 +91,7 @@ export class HybridRetriever {
          memory.id AS memory_id,
          memory.content AS content,
          memory.type AS type,
+         memory.scope_uri AS scope_uri,
          document.provider AS provider,
          document.title AS title,
          document.uri AS uri,
@@ -110,7 +113,36 @@ export class HybridRetriever {
         type: row.type,
         sourceLabel: sourceLabel(row),
         score: scoreById.get(row.memory_id) ?? 0,
+        provenance: {
+          scopeUri: row.scope_uri,
+          sameThread: currentScopePrefix !== undefined && row.scope_uri.startsWith(currentScopePrefix),
+        },
       }));
+  }
+
+  private async applyCurrentScopeBonus(
+    candidates: ScoredCandidate[],
+    currentScopePrefix?: string,
+  ): Promise<ScoredCandidate[]> {
+    if (currentScopePrefix === undefined || candidates.length === 0) {
+      return candidates.sort((a, b) => b.score - a.score);
+    }
+
+    const rows = await this.db.prepare(
+      `SELECT id, scope_uri FROM memory
+       WHERE id IN (${candidates.map(() => "?").join(", ")})`,
+    ).all<MemoryScopeRow>(candidates.map((candidate) => candidate.memoryId));
+    const scopeById = new Map(rows.map((row) => [row.id, row.scope_uri]));
+
+    return candidates
+      .map((candidate) => {
+        const scopeUri = scopeById.get(candidate.memoryId);
+        if (scopeUri === undefined || !scopeUri.startsWith(currentScopePrefix)) {
+          return candidate;
+        }
+        return { ...candidate, score: candidate.score + 0.08 };
+      })
+      .sort((a, b) => b.score - a.score);
   }
 }
 
@@ -151,10 +183,16 @@ interface SurfaceRow extends SqlRow {
   memory_id: string;
   content: string;
   type: MemoryType;
+  scope_uri: string;
   provider: Provider | null;
   title: string | null;
   uri: string | null;
   captured_at: number | null;
+}
+
+interface MemoryScopeRow extends SqlRow {
+  id: string;
+  scope_uri: string;
 }
 
 function mergeCandidates(
