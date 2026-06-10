@@ -52,6 +52,10 @@ interface WasmDatabaseLike {
   close(): void;
 }
 
+interface OpfsSahPoolUtil {
+  removeVfs(): Promise<boolean>;
+}
+
 interface Sqlite3 {
   oo1: { DB: new (filename: string, mode?: string, vfs?: string) => WasmDatabaseLike };
   installOpfsSAHPoolVfs?(options?: {
@@ -60,10 +64,11 @@ interface Sqlite3 {
     initialCapacity?: number;
     clearOnInit?: boolean;
     forceReinitIfPreviouslyFailed?: boolean;
-  }): Promise<unknown>;
+  }): Promise<OpfsSahPoolUtil>;
 }
 
 let dbInstance: WasmDatabaseLike | null = null;
+let poolUtil: OpfsSahPoolUtil | null = null;
 let opening: Promise<void> | null = null;
 
 async function openDb(filename: string): Promise<void> {
@@ -75,7 +80,31 @@ async function openDb(filename: string): Promise<void> {
     if (typeof sqlite3.installOpfsSAHPoolVfs !== "function") {
       throw new Error("sqlite-wasm did not expose installOpfsSAHPoolVfs in Worker");
     }
-    await sqlite3.installOpfsSAHPoolVfs({ name: "opfs-sahpool", initialCapacity: 8 });
+    // Retry SAH Pool install up to 5 times. The pool grabs file handles via
+    // FileSystemSyncAccessHandle; if a previous Worker for this origin
+    // terminated very recently (e.g. engine.reload after pairing), the browser
+    // can take a beat to release OPFS locks and install will fail with
+    // NoModificationAllowedError. Without retry, one race kills the engine
+    // until the user restarts the browser.
+    let installed: OpfsSahPoolUtil | null = null;
+    let lastError: unknown = null;
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      try {
+        installed = await sqlite3.installOpfsSAHPoolVfs({
+          name: "opfs-sahpool",
+          initialCapacity: 8,
+        });
+        lastError = null;
+        break;
+      } catch (error) {
+        lastError = error;
+        await new Promise((resolve) => setTimeout(resolve, 100 * 2 ** attempt));
+      }
+    }
+    if (installed === null) {
+      throw lastError instanceof Error ? lastError : new Error(String(lastError));
+    }
+    poolUtil = installed;
     dbInstance = new sqlite3.oo1.DB(filename, "ct", "opfs-sahpool");
     // Vector search lives in EdgeVec (browser-native HNSW + IndexedDB) — see
     // src/core/vector-index-edgevec.ts. The Node code path still uses
@@ -109,8 +138,24 @@ self.addEventListener("message", (event: MessageEvent<Request>) => {
         return;
       }
       if (req.t === "close") {
-        dbInstance.close();
+        try {
+          dbInstance.close();
+        } catch (error) {
+          console.warn("[mnemium/sqlite] db.close threw", error);
+        }
         dbInstance = null;
+        if (poolUtil !== null) {
+          // removeVfs() releases the SAH Pool's FileSystemSyncAccessHandles.
+          // Without this, the next Worker that tries installOpfsSAHPoolVfs
+          // for this origin will fail with NoModificationAllowedError
+          // (handles persist beyond the DB close, owned by the VFS itself).
+          try {
+            await poolUtil.removeVfs();
+          } catch (error) {
+            console.warn("[mnemium/sqlite] removeVfs threw", error);
+          }
+          poolUtil = null;
+        }
         post({ id: req.id, ok: true });
         return;
       }

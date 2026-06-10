@@ -95,12 +95,26 @@ serve(
     "daemon.installOllama": async () => handleInstallOllama(),
     "daemon.putConfig": async (msg) => handlePutDaemonConfig(msg),
     "engine.reload": async () => {
-      console.info("[mnemium/off] engine.reload — invalidating");
+      console.info("[mnemium/off] engine.reload — closing old engine");
+      // Close BEFORE nulling enginePromise. db.close() terminates the sqlite
+      // Worker, which releases the OPFS SAH Pool file handles. If we null
+      // first, a concurrent engine() call would boot a fresh Worker before
+      // the old one releases handles, and SAH Pool VFS install would fail
+      // with NoModificationAllowedError indefinitely (v0.0.5 bug).
+      const old = enginePromise;
+      if (old !== null) {
+        try {
+          const engineRef = await old;
+          await engineRef.db.close();
+        } catch (error) {
+          console.warn("[mnemium/off] engine.reload: closing old engine failed", error);
+        }
+      }
       enginePromise = null;
-      // Touch the engine so it boots fresh and any backend init errors
-      // surface in the caller's response.
+      // Boot fresh so any backend init errors surface in the caller's response.
       try {
         await engine();
+        console.info("[mnemium/off] engine.reload — rebooted");
         return { ok: true };
       } catch (error) {
         return { ok: false, error: error instanceof Error ? error.message : String(error) };
