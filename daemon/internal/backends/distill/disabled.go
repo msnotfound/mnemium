@@ -11,6 +11,8 @@ type Disabled struct{}
 func (Disabled) Distill(_ context.Context, _ Exchange) ([]Memory, []Entity, error) {
 	return nil, nil, nil
 }
-func (Disabled) Ready() bool                    { return false }
-func (Disabled) Model() string                  { return "" }
-func (Disabled) Warm(_ context.Context) error   { return nil }
+func (Disabled) Ready() bool                  { return false }
+func (Disabled) Model() string                { return "" }
+func (Disabled) Warm(_ context.Context) error { return nil }
+func (Disabled) State() string                { return "idle" }
+func (Disabled) Message() string              { return "distill backend not configured" }

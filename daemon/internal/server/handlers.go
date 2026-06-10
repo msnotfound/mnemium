@@ -49,15 +49,19 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		"version": s.version,
 		"backends": map[string]any{
 			"distill": map[string]any{
-				"kind":  cfg.Backends.Distill.Kind,
-				"model": set.Distill.Model(),
-				"ready": set.Distill.Ready(),
+				"kind":    cfg.Backends.Distill.Kind,
+				"model":   set.Distill.Model(),
+				"ready":   set.Distill.Ready(),
+				"state":   set.Distill.State(),
+				"message": set.Distill.Message(),
 			},
 			"embed": map[string]any{
-				"kind":  cfg.Backends.Embed.Kind,
-				"model": set.Embed.Model(),
-				"ready": set.Embed.Ready(),
-				"dim":   set.Embed.Dim(),
+				"kind":    cfg.Backends.Embed.Kind,
+				"model":   set.Embed.Model(),
+				"ready":   set.Embed.Ready(),
+				"dim":     set.Embed.Dim(),
+				"state":   set.Embed.State(),
+				"message": set.Embed.Message(),
 			},
 			"vec": map[string]any{
 				"kind":  cfg.Backends.Vec.Kind,

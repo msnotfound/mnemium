@@ -56,6 +56,8 @@ func (o *OpenAI) Model() string { return o.model }
 // Warm is a no-op for OpenAI-compatible HTTP backends — there's no local
 // state to pre-load. The first POST surfaces any auth / network problems.
 func (o *OpenAI) Warm(_ context.Context) error { return nil }
+func (o *OpenAI) State() string                { return "ready" }
+func (o *OpenAI) Message() string              { return "" }
 
 type openaiMessage struct {
 	Role    string `json:"role"`

@@ -46,4 +46,12 @@ type Backend interface {
 	// doesn't pay the cold-start tax. No-op for backends that don't have
 	// expensive initialization (Disabled, Ollama, OpenAI).
 	Warm(ctx context.Context) error
+	// State / Message expose lifecycle to /status so the UI can show
+	// loading spinners and actionable errors. State is one of:
+	//   "idle"    — configured but not yet started
+	//   "warming" — Warm() in flight; spawn happened, healthcheck pending
+	//   "ready"   — process up, healthy
+	//   "failed"  — Warm() returned error; Message has the cause
+	State() string
+	Message() string
 }

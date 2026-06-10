@@ -15,6 +15,10 @@ type Backend interface {
 	// from `mnemiumd serve` after Listen so the first /embed request
 	// doesn't pay the cold-start tax.
 	Warm(ctx context.Context) error
+	// State / Message expose lifecycle to /status. Values mirror the
+	// distill backend: "idle" | "warming" | "ready" | "failed".
+	State() string
+	Message() string
 }
 
 // Disabled is the no-op backend.
@@ -25,3 +29,5 @@ func (Disabled) Ready() bool                                              { retu
 func (Disabled) Model() string                                            { return "" }
 func (Disabled) Dim() int                                                 { return 0 }
 func (Disabled) Warm(_ context.Context) error                             { return nil }
+func (Disabled) State() string                                            { return "idle" }
+func (Disabled) Message() string                                          { return "embed backend not configured" }

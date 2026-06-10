@@ -46,6 +46,8 @@ func (o *Ollama) Dim() int {
 
 // Warm is a no-op for Ollama — see distill/ollama.go for rationale.
 func (o *Ollama) Warm(_ context.Context) error { return nil }
+func (o *Ollama) State() string                { return "ready" }
+func (o *Ollama) Message() string              { return "" }
 
 type ollamaEmbedRequest struct {
 	Model string   `json:"model"`

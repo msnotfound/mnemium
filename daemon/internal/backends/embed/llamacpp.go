@@ -32,11 +32,48 @@ type LlamaCPP struct {
 	proc   *exec.Cmd
 	port   int
 	client *http.Client
-	// Atomic so Ready() / Dim() are lock-free reads. /status polls these
-	// every ~2s and must not block on Warm() (which holds l.mu during
-	// the up-to-60s healthcheck loop).
+	// Atomic so Ready() / Dim() / State() / Message() are lock-free reads.
+	// Warm() holds l.mu for up to 60s; without atomics, /status would
+	// block for the entire warmup window and the extension would time out.
 	started atomic.Bool
 	dim     atomic.Int32
+	state   atomic.Int32
+	message atomic.Pointer[string]
+}
+
+const (
+	embedStateIdle    int32 = 0
+	embedStateWarming int32 = 1
+	embedStateReady   int32 = 2
+	embedStateFailed  int32 = 3
+)
+
+func embedStateName(s int32) string {
+	switch s {
+	case embedStateWarming:
+		return "warming"
+	case embedStateReady:
+		return "ready"
+	case embedStateFailed:
+		return "failed"
+	default:
+		return "idle"
+	}
+}
+
+func (l *LlamaCPP) setState(s int32, msg string) {
+	l.state.Store(s)
+	m := msg
+	l.message.Store(&m)
+}
+
+func (l *LlamaCPP) State() string { return embedStateName(l.state.Load()) }
+func (l *LlamaCPP) Message() string {
+	p := l.message.Load()
+	if p == nil {
+		return ""
+	}
+	return *p
 }
 
 func NewLlamaCPP(modelsDir, binDir, model string, threads int) (*LlamaCPP, error) {
@@ -102,28 +139,34 @@ func (l *LlamaCPP) ensureStarted(ctx context.Context) error {
 		args = append(args, "--threads", strconv.Itoa(l.threads))
 	}
 	log.Printf("[embed/llama-cpp] spawning %s --model %s --port %d --embedding", l.binPath, filepath.Base(l.modelPath), port)
+	l.setState(embedStateWarming, fmt.Sprintf("spawning llama-server --embedding (model=%s)", filepath.Base(l.modelPath)))
 	cmd := exec.Command(l.binPath, args...)
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	configureProcAttr(cmd)
 	startedAt := time.Now()
 	if err := cmd.Start(); err != nil {
+		l.setState(embedStateFailed, fmt.Sprintf("spawn failed: %v", err))
 		return fmt.Errorf("spawn llama-server (embed): %w", err)
 	}
 	l.proc = cmd
 	l.port = port
 	log.Printf("[embed/llama-cpp] spawned pid=%d port=%d — waiting for healthcheck", cmd.Process.Pid, port)
+	l.setState(embedStateWarming, fmt.Sprintf("loading model weights (pid=%d)", cmd.Process.Pid))
 
 	deadline := time.Now().Add(60 * time.Second)
 	for time.Now().Before(deadline) {
 		if l.healthy(ctx) {
 			l.started.Store(true)
-			log.Printf("[embed/llama-cpp] ready in %s (port=%d model=%s)", time.Since(startedAt).Round(time.Millisecond), port, filepath.Base(l.modelPath))
+			elapsed := time.Since(startedAt).Round(time.Millisecond)
+			l.setState(embedStateReady, fmt.Sprintf("ready in %s", elapsed))
+			log.Printf("[embed/llama-cpp] ready in %s (port=%d model=%s)", elapsed, port, filepath.Base(l.modelPath))
 			return nil
 		}
 		time.Sleep(500 * time.Millisecond)
 	}
 	log.Printf("[embed/llama-cpp] healthcheck timed out after 60s; killing subprocess")
+	l.setState(embedStateFailed, "healthcheck timed out after 60s")
 	_ = l.killUnlocked()
 	return errors.New("llama-server (embed) didn't become healthy within 60s")
 }
@@ -220,6 +263,7 @@ func (l *LlamaCPP) killUnlocked() error {
 		<-done
 	}
 	l.started.Store(false)
+	l.setState(embedStateIdle, "subprocess stopped")
 	l.proc = nil
 	l.port = 0
 	return nil

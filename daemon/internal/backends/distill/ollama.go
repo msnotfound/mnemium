@@ -44,6 +44,10 @@ func (o *Ollama) Model() string { return o.model }
 // to avoid spamming /api/tags on every daemon boot.
 func (o *Ollama) Warm(_ context.Context) error { return nil }
 
+// Ollama is assumed reachable; first call surfaces real errors.
+func (o *Ollama) State() string   { return "ready" }
+func (o *Ollama) Message() string { return "" }
+
 type ollamaMessage struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`

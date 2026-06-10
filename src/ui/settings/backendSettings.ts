@@ -74,6 +74,23 @@ export function daemonStatusSummary(status: DaemonStatusEnvelope | null): { labe
   }
   const distill = status.status.backends.distill;
   const model = distill.model ?? "daemon";
-  const readiness = distill.ready ? "ready" : "not ready";
-  return { label: `Reachable (${model} ${readiness})`, tone: "success" };
+  // Prefer the new tri-state lifecycle when the daemon reports it (v0.0.10+);
+  // older daemons only expose `ready: bool` so we fall back to that.
+  const state = distill.state ?? (distill.ready ? "ready" : "idle");
+  switch (state) {
+    case "ready":
+      return { label: `Reachable (${model} ready)`, tone: "success" };
+    case "warming":
+      return {
+        label: distill.message ? `Starting ${model} — ${distill.message}` : `Starting ${model}…`,
+        tone: "warning",
+      };
+    case "failed":
+      return {
+        label: distill.message ? `${model} failed: ${distill.message}` : `${model} failed to start`,
+        tone: "warning",
+      };
+    default:
+      return { label: `Reachable (${model} idle)`, tone: "neutral" };
+  }
 }

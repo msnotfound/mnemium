@@ -50,6 +50,13 @@ export async function updateSettings(patch: Partial<Config>): Promise<void> {
   await sendRpc({ t: "settings.update", patch });
 }
 
+/** Lifecycle of a llama-cpp backend on the daemon side.
+ *  - "idle"    — backend not configured or stopped
+ *  - "warming" — Warm() in flight; spawn happened, healthcheck pending
+ *  - "ready"   — subprocess up and serving
+ *  - "failed"  — Warm() returned error; `message` carries the cause */
+export type BackendState = "idle" | "warming" | "ready" | "failed";
+
 export interface DaemonStatusEnvelope {
   paired: boolean;
   reachable: boolean;
@@ -58,8 +65,8 @@ export interface DaemonStatusEnvelope {
     service: string;
     version: string;
     backends: {
-      distill: { kind: string; model?: string; ready: boolean };
-      embed: { kind: string; model?: string; ready: boolean; dim?: number };
+      distill: { kind: string; model?: string; ready: boolean; state?: BackendState; message?: string };
+      embed: { kind: string; model?: string; ready: boolean; dim?: number; state?: BackendState; message?: string };
       vec: { kind: string; count?: number; ready?: boolean };
     };
     models: { available: string[]; downloading: string[] };

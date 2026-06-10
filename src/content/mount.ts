@@ -9,8 +9,18 @@ export interface MountedMnemiumContent {
   unmount(): void;
 }
 
+/** Reason the UI block has no chunks to show. Drives the empty-state copy
+ *  so users aren't staring at a blank box wondering if Mnemium is broken. */
+export type PullState =
+  | { kind: "initial" } // UI mounted but no pull triggered yet — hidden
+  | { kind: "no-composer" } // adapter couldn't find the chat input — actionable
+  | { kind: "empty-draft" } // composer empty when hotkey pressed
+  | { kind: "no-matches"; scope: string; draftLen: number } // searched, found nothing
+  | { kind: "results" }; // chunks present — InPageUI renders the list
+
 interface InPageUiProps {
   chunks: SurfacedChunk[];
+  state: PullState;
   onAccept(chunk: SurfacedChunk): void | Promise<void>;
   onReject(chunk: SurfacedChunk): void | Promise<void>;
   onInject(text: string): void | Promise<void>;
@@ -78,6 +88,7 @@ function createMountState(adapter: SiteAdapter): {
   let shadow: ShadowRoot | null = null;
   let uiDispose: (() => void) | null = null;
   let chunks: SurfacedChunk[] = [];
+  let pullState: PullState = { kind: "initial" };
 
   return {
     anchor(): void {
@@ -102,16 +113,46 @@ function createMountState(adapter: SiteAdapter): {
     },
 
     async pullMemory(): Promise<void> {
-      const draft = composerText(adapter.locateComposer());
+      const composer = adapter.locateComposer();
+      const draft = composerText(composer);
       const threadId = adapter.currentThreadId() ?? "unknown";
+      const scope = `personal::${adapter.provider}::${threadId}`;
+      console.info(
+        "[mnemium/content] pull-memory →",
+        `provider=${adapter.provider}`,
+        `thread=${threadId}`,
+        `composer=${composer === null ? "MISSING" : "found"}`,
+        `draftLen=${draft.length}`,
+      );
+      if (composer === null) {
+        pullState = { kind: "no-composer" };
+        chunks = [];
+        this.anchor();
+        console.warn("[mnemium/content] adapter could not locate composer — pulling skipped");
+        return;
+      }
+      if (draft.length === 0) {
+        pullState = { kind: "empty-draft" };
+        chunks = [];
+        this.anchor();
+        console.info("[mnemium/content] composer empty — pulling skipped");
+        return;
+      }
+      const started = Date.now();
       const response = await sendRpc({
         t: "retrieve",
         draft,
-        scope: `personal::${adapter.provider}::${threadId}`,
+        scope,
         k: 6,
       });
-
       chunks = retrieveChunks(response);
+      pullState = chunks.length > 0 ? { kind: "results" } : { kind: "no-matches", scope, draftLen: draft.length };
+      console.info(
+        "[mnemium/content] pull-memory ←",
+        `chunks=${chunks.length}`,
+        `took=${Date.now() - started}ms`,
+        `scope=${scope}`,
+      );
       this.anchor();
     },
 
@@ -134,6 +175,7 @@ function createMountState(adapter: SiteAdapter): {
       uiDispose?.();
       const dispose = mountInPageUI(container, {
         chunks,
+        state: pullState,
         onAccept(chunk) {
           void sendRpc({ t: "inject.feedback", memoryId: chunk.memoryId, accepted: true, ctx: defaultBanditFeatures(chunk) });
         },
@@ -205,6 +247,12 @@ async function loadMountInPageUI(): Promise<MountInPageUI> {
 function mountPlaceholderInPageUI(container: HTMLElement, props: InPageUiProps): () => void {
   container.replaceChildren();
 
+  // Initial state = no hotkey pressed yet. Hide entirely so the block
+  // doesn't pollute the chat UI before the user explicitly recalls.
+  if (props.state.kind === "initial") {
+    return () => container.replaceChildren();
+  }
+
   const style = document.createElement("style");
   style.textContent = `
     :host { all: initial; }
@@ -214,7 +262,10 @@ function mountPlaceholderInPageUI(container: HTMLElement, props: InPageUiProps):
       color: #343434;
       font: 13px/1.4 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       padding: 8px;
+      border-radius: 6px;
     }
+    .mnemium-title { font-weight: 600; margin-bottom: 4px; }
+    .mnemium-hint { color: #666; font-size: 12px; }
     .mnemium-row { display: flex; gap: 6px; align-items: center; margin-top: 6px; }
     button {
       border: 1px solid #c8c8c8;
@@ -223,12 +274,36 @@ function mountPlaceholderInPageUI(container: HTMLElement, props: InPageUiProps):
       cursor: pointer;
       font: inherit;
       padding: 2px 6px;
+      border-radius: 4px;
     }
   `;
 
   const block = document.createElement("div");
   block.className = "mnemium-block";
-  block.textContent = props.chunks.length === 0 ? "Mnemium" : "Mnemium memory";
+
+  const title = document.createElement("div");
+  title.className = "mnemium-title";
+  title.textContent = props.state.kind === "results" ? "Mnemium · related memories" : "Mnemium";
+  block.append(title);
+
+  // Empty-state copy: tell the user exactly why no memories appeared so
+  // they can act on it instead of assuming the feature is broken.
+  if (props.state.kind !== "results") {
+    const hint = document.createElement("div");
+    hint.className = "mnemium-hint";
+    switch (props.state.kind) {
+      case "no-composer":
+        hint.textContent = "Couldn't find a chat input on this page. Mnemium may not yet support this site's layout — please open an issue.";
+        break;
+      case "empty-draft":
+        hint.textContent = "Type something in the chat input, then press Alt+Shift+M to pull related memories.";
+        break;
+      case "no-matches":
+        hint.textContent = "No memories matched this thread + draft yet. Memories are scoped per-thread; captured exchanges in OTHER threads won't show up here.";
+        break;
+    }
+    block.append(hint);
+  }
 
   for (const chunk of props.chunks) {
     const row = document.createElement("div");

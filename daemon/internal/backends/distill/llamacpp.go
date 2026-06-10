@@ -41,11 +41,47 @@ type LlamaCPP struct {
 	proc   *exec.Cmd
 	port   int
 	client *http.Client
-	// started is atomic so Ready() is a lock-free read. While Warm() runs
-	// (up to 60s holding l.mu during healthcheck polling), Ready() must
-	// stay fast — /status calls it every couple of seconds and would
-	// otherwise time out the extension.
+	// started + state + message are atomic so /status reads are lock-free.
+	// Warm() holds l.mu for up to 60s during healthcheck polling; without
+	// atomics, /status would time out the extension's daemon-status probe.
 	started atomic.Bool
+	state   atomic.Int32          // see distillState* constants
+	message atomic.Pointer[string] // human-readable lifecycle detail
+}
+
+const (
+	distillStateIdle    int32 = 0
+	distillStateWarming int32 = 1
+	distillStateReady   int32 = 2
+	distillStateFailed  int32 = 3
+)
+
+func distillStateName(s int32) string {
+	switch s {
+	case distillStateWarming:
+		return "warming"
+	case distillStateReady:
+		return "ready"
+	case distillStateFailed:
+		return "failed"
+	default:
+		return "idle"
+	}
+}
+
+func (l *LlamaCPP) setState(s int32, msg string) {
+	l.state.Store(s)
+	m := msg
+	l.message.Store(&m)
+}
+
+func (l *LlamaCPP) State() string { return distillStateName(l.state.Load()) }
+func (l *LlamaCPP) Message() string {
+	p := l.message.Load()
+	if p == nil {
+		return ""
+	}
+	return *p
 }
 
 // NewLlamaCPP constructs the wrapper. Doesn't spawn yet.
@@ -126,29 +162,35 @@ func (l *LlamaCPP) ensureStarted(ctx context.Context) error {
 		args = append(args, "--threads", strconv.Itoa(l.threads))
 	}
 	log.Printf("[distill/llama-cpp] spawning %s --model %s --port %d", l.binPath, filepath.Base(l.modelPath), port)
+	l.setState(distillStateWarming, fmt.Sprintf("spawning llama-server (model=%s)", filepath.Base(l.modelPath)))
 	cmd := exec.Command(l.binPath, args...)
 	cmd.Stdout = os.Stderr // route llama-server logs to our stderr
 	cmd.Stderr = os.Stderr
 	configureProcAttr(cmd)
 	startedAt := time.Now()
 	if err := cmd.Start(); err != nil {
+		l.setState(distillStateFailed, fmt.Sprintf("spawn failed: %v", err))
 		return fmt.Errorf("spawn llama-server: %w", err)
 	}
 	l.proc = cmd
 	l.port = port
 	log.Printf("[distill/llama-cpp] spawned pid=%d port=%d — waiting for healthcheck", cmd.Process.Pid, port)
+	l.setState(distillStateWarming, fmt.Sprintf("loading model weights (pid=%d)", cmd.Process.Pid))
 
 	// Healthcheck loop — wait up to 60s for the server to accept requests.
 	deadline := time.Now().Add(60 * time.Second)
 	for time.Now().Before(deadline) {
 		if l.healthy(ctx) {
 			l.started.Store(true)
-			log.Printf("[distill/llama-cpp] ready in %s (port=%d model=%s)", time.Since(startedAt).Round(time.Millisecond), port, filepath.Base(l.modelPath))
+			elapsed := time.Since(startedAt).Round(time.Millisecond)
+			l.setState(distillStateReady, fmt.Sprintf("ready in %s", elapsed))
+			log.Printf("[distill/llama-cpp] ready in %s (port=%d model=%s)", elapsed, port, filepath.Base(l.modelPath))
 			return nil
 		}
 		time.Sleep(500 * time.Millisecond)
 	}
 	log.Printf("[distill/llama-cpp] healthcheck timed out after 60s; killing subprocess")
+	l.setState(distillStateFailed, "healthcheck timed out after 60s")
 	_ = l.killUnlocked()
 	return errors.New("llama-server didn't become healthy within 60s")
 }
@@ -237,6 +279,7 @@ func (l *LlamaCPP) killUnlocked() error {
 		<-done
 	}
 	l.started.Store(false)
+	l.setState(distillStateIdle, "subprocess stopped")
 	l.proc = nil
 	l.port = 0
 	return nil

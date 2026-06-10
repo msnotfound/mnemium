@@ -88,12 +88,17 @@ export class DaemonClient {
   }
 
   async distill(exchange: Exchange): Promise<{ memories: DraftMemory[]; entities: Entity[] }> {
-    // Daemon decodes the body directly into its Exchange struct — send it flat.
-    return this.request("POST", "/distill", exchange, 30000);
+    // 90s: qwen2.5-1.5b decodes ~17 tok/s on a typical laptop CPU, and a
+    // long distill response (~500 tokens of memory + entities) easily
+    // eats a 30s budget — cancelling here strands llama-server mid-generation
+    // and the user sees no memory. Daemon-side handler timeout is 120s.
+    return this.request("POST", "/distill", exchange, 90000);
   }
 
   async embed(texts: string[]): Promise<{ model: string; dim: number; vectors: number[][] }> {
-    return this.request("POST", "/embed", { texts }, 10000);
+    // Embed is much faster than distill (nomic-embed @ ~768 dim/sec), but
+    // bumped to 30s as a safety margin for batch embed calls.
+    return this.request("POST", "/embed", { texts }, 30000);
   }
 
   async vecUpsert(
