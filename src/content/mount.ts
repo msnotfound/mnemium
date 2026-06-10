@@ -355,12 +355,40 @@ function composerText(composer: HTMLElement | null): string {
     return "";
   }
 
-  if (composer instanceof HTMLTextAreaElement || composer instanceof HTMLInputElement) {
-    return composer.value;
+  // Modern chat editors (ProseMirror in ChatGPT, Lexical in Claude,
+  // rich-textarea in Gemini) are contenteditable divs. Many sites keep a
+  // hidden <textarea> alongside the editor for accessibility/form submit
+  // — that textarea's `.value` is always "" because the user actually
+  // types in the contenteditable. If our adapter happened to match the
+  // hidden textarea first (chatgpt's old layout had `textarea[data-id='root']`
+  // which now matches the a11y mirror), composer.value would be "" and we'd
+  // skip distill with "composer empty" even though the user typed text.
+  //
+  // Resolution order:
+  //   1. composer is itself contenteditable → its textContent
+  //   2. composer contains a contenteditable descendant → that's textContent
+  //   3. composer is a textarea/input with a non-empty value → that value
+  //   4. composer contains a textarea/input with a non-empty value
+  //   5. composer.textContent as last resort
+  if (composer instanceof HTMLElement && composer.isContentEditable) {
+    const text = (composer.textContent ?? "").trim();
+    if (text.length > 0) return text;
   }
 
-  const control = composer.querySelector<HTMLTextAreaElement | HTMLInputElement>("textarea, input[type='text'], input:not([type])");
-  if (control !== null) {
+  const editable = composer.querySelector<HTMLElement>("[contenteditable='true'], [contenteditable=''], [contenteditable='plaintext-only']");
+  if (editable !== null) {
+    const text = (editable.textContent ?? "").trim();
+    if (text.length > 0) return text;
+  }
+
+  if (composer instanceof HTMLTextAreaElement || composer instanceof HTMLInputElement) {
+    if (composer.value.length > 0) return composer.value;
+  }
+
+  const control = composer.querySelector<HTMLTextAreaElement | HTMLInputElement>(
+    "textarea, input[type='text'], input:not([type])",
+  );
+  if (control !== null && control.value.length > 0) {
     return control.value;
   }
 
