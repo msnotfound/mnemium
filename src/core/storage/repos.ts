@@ -1,11 +1,15 @@
 import type { Database, SqlParams, SqlRow } from "./db";
 import type {
   Chunk,
+  ClaimStatus,
   Document,
   LedgerEntry,
   Memory,
+  MemoryRejection,
   MemorySource,
   MemoryType,
+  Speaker,
+  SupportKind,
 } from "@shared/types";
 import type { DocumentRepo, LedgerRepo, MemoryRepo } from "@shared/interfaces";
 
@@ -109,8 +113,33 @@ class SqlMemoryRepo implements MemoryRepo {
     });
   }
 
+  async recordRejection(rejection: MemoryRejection): Promise<void> {
+    await this.db.prepare(
+      `INSERT INTO memory_rejection (
+        id, scope_uri, provider, thread_id, message_id, type, content,
+        evidence, speaker, support_kind, reason, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        reason = excluded.reason,
+        created_at = excluded.created_at`,
+    ).run([
+      rejection.id,
+      rejection.scopeUri,
+      rejection.provider ?? null,
+      rejection.threadId ?? null,
+      rejection.messageId ?? null,
+      rejection.type ?? null,
+      rejection.content,
+      rejection.evidence ?? null,
+      rejection.speaker ?? null,
+      rejection.supportKind ?? null,
+      rejection.reason,
+      rejection.createdAt,
+    ]);
+  }
+
   async byScope(scopePrefix: string, opts?: { type?: MemoryType[]; limit?: number }): Promise<Memory[]> {
-    const where = ["scope_uri LIKE ?", "is_latest = 1", "is_forgotten = 0"];
+    const where = ["scope_uri LIKE ?", "is_latest = 1", "is_forgotten = 0", "claim_status = 'active'"];
     const bind: Array<string | number> = [`${scopePrefix}%`];
     appendTypeFilter(where, bind, opts?.type);
     const limit = opts?.limit ?? 50;
@@ -132,7 +161,12 @@ class SqlMemoryRepo implements MemoryRepo {
     if (ftsQuery.length === 0) {
       return [];
     }
-    const where = ["memory.is_latest = 1", "memory.is_forgotten = 0", "fts_memory MATCH ?"];
+    const where = [
+      "memory.is_latest = 1",
+      "memory.is_forgotten = 0",
+      "memory.claim_status = 'active'",
+      "fts_memory MATCH ?",
+    ];
     const bind: Array<string | number> = [ftsQuery];
     if (opts.scopePrefix !== undefined) {
       where.push("memory.scope_uri LIKE ?");
@@ -175,8 +209,9 @@ class SqlMemoryRepo implements MemoryRepo {
       `INSERT INTO memory (
         id, type, content, scope_uri, version, is_latest, parent_memory_id, root_memory_id,
         is_static, is_inference, confidence, event_date, document_date, valid_from,
-        valid_to, forget_after, forget_reason, is_forgotten, reuse_count, source_count, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        valid_to, forget_after, forget_reason, is_forgotten, reuse_count, source_count, created_at,
+        evidence, speaker, support_kind, claim_status
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         type = excluded.type,
         content = excluded.content,
@@ -197,7 +232,11 @@ class SqlMemoryRepo implements MemoryRepo {
         is_forgotten = excluded.is_forgotten,
         reuse_count = excluded.reuse_count,
         source_count = excluded.source_count,
-        created_at = excluded.created_at`,
+        created_at = excluded.created_at,
+        evidence = excluded.evidence,
+        speaker = excluded.speaker,
+        support_kind = excluded.support_kind,
+        claim_status = excluded.claim_status`,
     ).run(memoryParams(m));
   }
 
@@ -271,6 +310,10 @@ interface MemoryRow extends SqlRow {
   reuse_count: number;
   source_count: number;
   created_at: number;
+  evidence: string | null;
+  speaker: string | null;
+  support_kind: string | null;
+  claim_status: string | null;
 }
 
 interface LedgerRow extends SqlRow {
@@ -305,6 +348,10 @@ function memoryParams(m: Memory): SqlParams {
     m.reuseCount,
     m.sourceCount,
     m.createdAt,
+    m.evidence ?? null,
+    m.speaker ?? null,
+    m.supportKind ?? null,
+    m.claimStatus ?? "active",
   ];
 }
 
@@ -331,6 +378,10 @@ function rowToMemory(row: MemoryRow): Memory {
     reuseCount: row.reuse_count,
     sourceCount: row.source_count,
     createdAt: row.created_at,
+    evidence: row.evidence ?? undefined,
+    speaker: (row.speaker as Speaker | null) ?? undefined,
+    supportKind: (row.support_kind as SupportKind | null) ?? undefined,
+    claimStatus: (row.claim_status as ClaimStatus | null) ?? "active",
   };
 }
 

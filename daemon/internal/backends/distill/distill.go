@@ -16,15 +16,21 @@ type Exchange struct {
 	Ts            int64  `json:"ts"`
 }
 
-// Memory is the structured draft a distiller produces. Aligns with the
-// extension's DraftMemory type (src/shared/types.ts).
+// Memory is the structured draft a distiller produces — a CANDIDATE claim,
+// not trusted memory. Aligns with the extension's DraftMemory type
+// (src/shared/types.ts). The extension-side deterministic validator gates
+// entry into the active memory set: Evidence must be a verbatim substring
+// of the source exchange, and Speaker must match where it appears.
 type Memory struct {
-	Type       string   `json:"type"`
-	Content    string   `json:"content"`
-	IsStatic   bool     `json:"isStatic"`
-	IsInference bool    `json:"isInference"`
-	Confidence float64  `json:"confidence"`
-	Entities   []string `json:"entities,omitempty"`
+	Type        string   `json:"type"`
+	Content     string   `json:"content"`
+	Evidence    string   `json:"evidence,omitempty"`
+	Speaker     string   `json:"speaker,omitempty"`
+	SupportKind string   `json:"supportKind,omitempty"`
+	IsStatic    bool     `json:"isStatic"`
+	IsInference bool     `json:"isInference"`
+	Confidence  float64  `json:"confidence"`
+	Entities    []string `json:"entities,omitempty"`
 }
 
 // Entity links a memory to a named concept.

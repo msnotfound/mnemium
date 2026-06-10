@@ -20,6 +20,26 @@ export type EdgeType = "about" | "co_occurs" | "supersedes" | "invalidates" | "d
 export type ComputedBy = "eager" | "lazy" | "llm";
 export type SourceType = "chat_turn" | "web" | "selection";
 
+/** Who actually said the evidence span backing a claim. */
+export const SPEAKERS = ["user", "assistant"] as const;
+export type Speaker = (typeof SPEAKERS)[number];
+
+export function isSpeaker(value: string): value is Speaker {
+  return (SPEAKERS as readonly string[]).includes(value);
+}
+
+/** How much interpretation went into deriving content from its evidence. */
+export const SUPPORT_KINDS = ["exact", "paraphrase", "inferred"] as const;
+export type SupportKind = (typeof SUPPORT_KINDS)[number];
+
+export function isSupportKind(value: string): value is SupportKind {
+  return (SUPPORT_KINDS as readonly string[]).includes(value);
+}
+
+/** Trust lifecycle of a claim. Only "active" claims are retrievable. */
+export const CLAIM_STATUSES = ["active", "pending_review", "rejected"] as const;
+export type ClaimStatus = (typeof CLAIM_STATUSES)[number];
+
 /** Raw captured source. One per conversation thread (turns become chunks). */
 export interface Document {
   id: string;
@@ -55,6 +75,13 @@ export interface Memory {
   isStatic: boolean; // stable trait vs dynamic activity
   isInference: boolean;
   confidence: number; // 0..1
+  // trust (v2): evidence-bound extraction
+  evidence?: string; // verbatim source span backing the claim
+  speaker?: Speaker; // who said the evidence
+  supportKind?: SupportKind;
+  /** Lifecycle gate — retrieval only surfaces "active". Optional for
+   *  legacy rows / fixtures; persisted as "active" when omitted. */
+  claimStatus?: ClaimStatus;
   // bi-temporal
   eventDate?: number;
   documentDate?: number;
@@ -67,6 +94,24 @@ export interface Memory {
   // signals
   reuseCount: number;
   sourceCount: number;
+  createdAt: number;
+}
+
+/** Audit row for a candidate the validator dropped. Lives in its own table
+ *  (memory_rejection), never in memory — rejected claims must be structurally
+ *  unable to leak into retrieval. */
+export interface MemoryRejection {
+  id: string;
+  scopeUri: string;
+  provider?: Provider;
+  threadId?: string;
+  messageId?: string;
+  type?: string;
+  content: string;
+  evidence?: string;
+  speaker?: string;
+  supportKind?: string;
+  reason: string;
   createdAt: number;
 }
 
@@ -118,11 +163,20 @@ export interface Exchange {
   ts: number;
 }
 
-/** Output of MemoryModel.distill before persistence. */
+/** Output of MemoryModel.distill before persistence — a CANDIDATE claim.
+ *  Candidates only become Memory rows after passing the deterministic
+ *  validator (src/core/validate.ts), which checks the evidence span exists
+ *  verbatim in the source and the speaker attribution is correct. */
 export interface DraftMemory {
   type: MemoryType;
   content: string;
-  isStatic: boolean;
+  /** Exact substring of the source userText/assistantText supporting the claim. */
+  evidence?: string;
+  /** Who actually said the evidence span. */
+  speaker?: Speaker;
+  /** exact | paraphrase | inferred — interpretation distance from evidence. */
+  supportKind?: SupportKind;
+  isStatic?: boolean;
   isInference?: boolean;
   confidence?: number;
   entities: string[]; // normalized names
@@ -136,6 +190,12 @@ export interface SurfacedChunk {
   type: MemoryType;
   sourceLabel: string; // "Claude · 3d"
   score: number;
+  /** Which retrieval mode produced this hit (dominant contributor). */
+  matchKind?: "semantic" | "lexical";
+  /** Raw score of the winning mode (cosine for semantic, normalized bm25 for lexical). */
+  matchScore?: number;
+  /** Verbatim source quote that grounded this memory at extraction time. */
+  evidence?: string;
   provenance?: {
     scopeUri: string;
     sameThread: boolean;

@@ -57,7 +57,12 @@ export class HybridRetriever {
     opts: HybridSearchOptions,
     limit: number,
   ): Promise<Array<{ id: string; score: number }>> {
-    const where = ["memory.is_latest = 1", "memory.is_forgotten = 0", "fts_memory MATCH ?"];
+    const where = [
+      "memory.is_latest = 1",
+      "memory.is_forgotten = 0",
+      "memory.claim_status = 'active'",
+      "fts_memory MATCH ?",
+    ];
     const params: SqlValue[] = [query];
     if (opts.scopePrefix !== undefined) {
       where.push("memory.scope_uri LIKE ?");
@@ -85,13 +90,14 @@ export class HybridRetriever {
       return [];
     }
     const order = new Map(candidates.map((candidate, index) => [candidate.memoryId, index]));
-    const scoreById = new Map(candidates.map((candidate) => [candidate.memoryId, candidate.score]));
+    const byId = new Map(candidates.map((candidate) => [candidate.memoryId, candidate]));
     const rows = await this.db.prepare(
       `SELECT
          memory.id AS memory_id,
          memory.content AS content,
          memory.type AS type,
          memory.scope_uri AS scope_uri,
+         memory.evidence AS evidence,
          document.provider AS provider,
          document.title AS title,
          document.uri AS uri,
@@ -101,23 +107,31 @@ export class HybridRetriever {
        LEFT JOIN memory_source ON memory_source.memory_id = memory.id
        LEFT JOIN document ON document.id = memory_source.document_id
        WHERE memory.id IN (${candidates.map(() => "?").join(", ")})
+         AND memory.claim_status = 'active'
        GROUP BY memory.id
        ORDER BY relevance DESC`,
     ).all<SurfaceRow>(candidates.map((candidate) => candidate.memoryId));
 
     return rows
       .sort((a, b) => (order.get(a.memory_id) ?? 0) - (order.get(b.memory_id) ?? 0))
-      .map((row) => ({
-        memoryId: row.memory_id,
-        content: row.content,
-        type: row.type,
-        sourceLabel: sourceLabel(row),
-        score: scoreById.get(row.memory_id) ?? 0,
-        provenance: {
-          scopeUri: row.scope_uri,
-          sameThread: currentScopePrefix !== undefined && row.scope_uri.startsWith(currentScopePrefix),
-        },
-      }));
+      .map((row) => {
+        const candidate = byId.get(row.memory_id);
+        const match = matchReason(candidate);
+        return {
+          memoryId: row.memory_id,
+          content: row.content,
+          type: row.type,
+          sourceLabel: sourceLabel(row),
+          score: candidate?.score ?? 0,
+          matchKind: match.kind,
+          matchScore: match.score,
+          evidence: row.evidence ?? undefined,
+          provenance: {
+            scopeUri: row.scope_uri,
+            sameThread: currentScopePrefix !== undefined && row.scope_uri.startsWith(currentScopePrefix),
+          },
+        };
+      });
   }
 
   private async applyCurrentScopeBonus(
@@ -184,10 +198,33 @@ interface SurfaceRow extends SqlRow {
   content: string;
   type: MemoryType;
   scope_uri: string;
+  evidence: string | null;
   provider: Provider | null;
   title: string | null;
   uri: string | null;
   captured_at: number | null;
+}
+
+/** Which retrieval mode "won" this candidate: compare the weighted
+ *  contributions that mergeCandidates used (dense 0.65 / lexical 0.35) and
+ *  report the winner's RAW score so the UI shows "0.82 semantic" rather
+ *  than a blended number nobody can interpret. */
+function matchReason(candidate: ScoredCandidate | undefined): {
+  kind: "semantic" | "lexical" | undefined;
+  score: number | undefined;
+} {
+  if (candidate === undefined) {
+    return { kind: undefined, score: undefined };
+  }
+  const dense = (candidate.denseScore ?? 0) * 0.65;
+  const lexical = (candidate.lexicalScore ?? 0) * 0.35;
+  if (dense === 0 && lexical === 0) {
+    return { kind: undefined, score: undefined };
+  }
+  if (dense >= lexical) {
+    return { kind: "semantic", score: candidate.denseScore };
+  }
+  return { kind: "lexical", score: candidate.lexicalScore };
 }
 
 interface MemoryScopeRow extends SqlRow {

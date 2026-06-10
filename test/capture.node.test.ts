@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { CapturePipeline } from "@/core/capture";
 import type { Embedder, MemoryModel, MemoryRepo, VectorIndex } from "@/shared/interfaces";
-import type { Chunk, Document, DraftMemory, Edge, Entity, Exchange, Memory, MemorySource } from "@/shared/types";
+import type { Chunk, Document, DraftMemory, Edge, Entity, Exchange, Memory, MemoryRejection, MemorySource } from "@/shared/types";
 
 describe("capture pipeline", () => {
   test("drops distilled memories whose type is not in the MemoryType enum", async () => {
@@ -18,6 +18,9 @@ describe("capture pipeline", () => {
         {
           type: "preference|fact|skill|goal|constraint|context",
           content: "The user prefers poha for breakfast.",
+          evidence: "poha for breakfast",
+          speaker: "user",
+          supportKind: "paraphrase",
           isStatic: true,
           confidence: 0.8,
           entities: [],
@@ -25,6 +28,9 @@ describe("capture pipeline", () => {
         {
           type: "preference",
           content: "The user prefers historical places.",
+          evidence: "I prefer historical places",
+          speaker: "user",
+          supportKind: "paraphrase",
           isStatic: true,
           confidence: 0.9,
           entities: [],
@@ -42,11 +48,15 @@ describe("capture pipeline", () => {
 });
 
 class FakeMemoryRepo implements MemoryRepo {
+  readonly rejections: MemoryRejection[] = [];
   constructor(private readonly stored: Memory[]) {}
   async upsert(memory: Memory): Promise<void> {
     this.stored.push(memory);
   }
   async linkSource(_link: MemorySource): Promise<void> {}
+  async recordRejection(rejection: MemoryRejection): Promise<void> {
+    this.rejections.push(rejection);
+  }
   async supersede(_oldId: string, _next: Memory): Promise<void> {}
   async byScope(): Promise<Memory[]> {
     return [];

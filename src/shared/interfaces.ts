@@ -4,7 +4,7 @@
 
 import type {
   Edge, Entity, Exchange, Memory, MemoryType, DraftMemory, Provider,
-  Document, Chunk, MemorySource, LedgerEntry,
+  Document, Chunk, MemorySource, MemoryRejection, LedgerEntry,
 } from "./types";
 
 export type Unsubscribe = () => void;
@@ -69,6 +69,8 @@ export interface DocumentRepo {
 export interface MemoryRepo {
   upsert(m: Memory): Promise<void>;
   linkSource(link: MemorySource): Promise<void>;
+  /** Audit trail for validator-dropped candidates (memory_rejection table). */
+  recordRejection(rejection: MemoryRejection): Promise<void>;
   supersede(oldId: string, next: Memory): Promise<void>; // version-chain bump
   byScope(scopePrefix: string, opts?: { type?: MemoryType[]; limit?: number }): Promise<Memory[]>;
   search(query: string, opts: { scopePrefix?: string; type?: MemoryType[]; k: number }): Promise<Memory[]>;

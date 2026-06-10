@@ -9,6 +9,12 @@ import (
 
 // SystemPrompt is shared across every text-LLM distill backend so the
 // daemon makes the same ask of qwen / llama / gpt-4o / claude.
+//
+// Every memory is a CANDIDATE claim that must carry its own evidence: a
+// verbatim span copied from the exchange, plus who said it. A downstream
+// deterministic validator drops any memory whose evidence is not found
+// character-for-character in the source — so paraphrased "evidence" is
+// wasted output.
 const SystemPrompt = `You extract durable, reusable facts from chat exchanges so a personal assistant can recall them later. Output STRICT JSON ONLY — no prose, no markdown fences.
 
 Schema:
@@ -17,6 +23,9 @@ Schema:
     {
       "type": "fact",
       "content": "<one sentence stated in third person about the user>",
+      "evidence": "<EXACT contiguous quote copied character-for-character from the USER or ASSISTANT text below that supports this claim>",
+      "speaker": "<user|assistant — who actually wrote the evidence quote>",
+      "supportKind": "<exact|paraphrase|inferred — exact: content restates the evidence; paraphrase: content rewords it; inferred: content goes beyond it>",
       "isStatic": <true if always-true biographical fact, false if temporary state>,
       "isInference": <true if you inferred it, false if user stated it>,
       "confidence": <0.0..1.0>,
@@ -29,11 +38,42 @@ Schema:
 }
 
 Rules:
-- Skip greetings, meta-talk, anything not durable.
+- evidence MUST be copied verbatim from the exchange — do not reword, trim mid-word, or fix typos. Memories whose evidence is not found verbatim in the source are discarded.
+- speaker is whoever actually wrote the evidence: "user" for the USER section, "assistant" for the ASSISTANT section.
 - "the user" is always the speaker of USER messages.
+- Never turn an assistant suggestion into a user fact. Assistant-spoken evidence may only support claims describing the user.
+- Never extract hypotheticals (maybe / might / could / perhaps / what if / one option / thinking about). They are not durable.
+- preference, identity and fact memories require exact or paraphrase support; only task and episode memories may be inferred.
+- Skip greetings, meta-talk, anything not durable.
 - For memory.type, choose exactly one of: fact, preference, episode, task, identity.
 - If nothing durable is present, return {"memories":[],"entities":[]}.
 - Output ONLY the JSON object. No explanation, no fences.`
+
+// Grammar is a GBNF grammar (llama.cpp dialect) that hard-constrains
+// llama-server output to the distill schema — including the enum values
+// for type / speaker / supportKind. Small models (qwen2.5-1.5b) follow
+// the field-list prompt unreliably; the grammar makes the SHAPE
+// deterministic so the only remaining failure mode is content-level
+// (hallucinated evidence), which the extension validator catches by
+// substring check. Sent instead of response_format on the llama.cpp
+// backend only; cloud backends keep json_object mode.
+// Ref: https://github.com/ggml-org/llama.cpp/blob/master/grammars/README.md
+const Grammar = `root ::= "{" ws "\"memories\"" ws ":" ws memories ws "," ws "\"entities\"" ws ":" ws entities ws "}" ws
+memories ::= "[" ws "]" | "[" ws memory (ws "," ws memory)* ws "]"
+memory ::= "{" ws "\"type\"" ws ":" ws memtype ws "," ws "\"content\"" ws ":" ws string ws "," ws "\"evidence\"" ws ":" ws string ws "," ws "\"speaker\"" ws ":" ws speaker ws "," ws "\"supportKind\"" ws ":" ws supportkind ws "," ws "\"isStatic\"" ws ":" ws bool ws "," ws "\"isInference\"" ws ":" ws bool ws "," ws "\"confidence\"" ws ":" ws number ws "," ws "\"entities\"" ws ":" ws strings ws "}"
+memtype ::= "\"fact\"" | "\"preference\"" | "\"episode\"" | "\"task\"" | "\"identity\""
+speaker ::= "\"user\"" | "\"assistant\""
+supportkind ::= "\"exact\"" | "\"paraphrase\"" | "\"inferred\""
+entities ::= "[" ws "]" | "[" ws entity (ws "," ws entity)* ws "]"
+entity ::= "{" ws "\"name\"" ws ":" ws string ws "," ws "\"type\"" ws ":" ws string ws "," ws "\"normalizedName\"" ws ":" ws string ws "}"
+strings ::= "[" ws "]" | "[" ws string (ws "," ws string)* ws "]"
+string ::= "\"" char* "\""
+char ::= [^"\\\x00-\x1F] | "\\" (["\\bfnrt/] | "u" hex hex hex hex)
+hex ::= [0-9a-fA-F]
+bool ::= "true" | "false"
+number ::= ("0" | "1") ("." [0-9]+)?
+ws ::= [ \t\n\r]*
+`
 
 // BuildUserPrompt assembles the per-exchange prompt body sent after the
 // system prompt. Keeps prompts deterministic so model swaps stay
@@ -59,6 +99,9 @@ type rawResponse struct {
 	Memories []struct {
 		Type        string   `json:"type"`
 		Content     string   `json:"content"`
+		Evidence    string   `json:"evidence"`
+		Speaker     string   `json:"speaker"`
+		SupportKind string   `json:"supportKind"`
 		IsStatic    bool     `json:"isStatic"`
 		IsInference bool     `json:"isInference"`
 		Confidence  float64  `json:"confidence"`
@@ -101,9 +144,16 @@ func ParseResponse(raw string, scopeURI string) ([]Memory, []Entity, error) {
 		if confidence > 1 {
 			confidence = 1
 		}
+		// Normalize trust fields but do NOT gate on them here — the
+		// extension-side validator is the single enforcement point (it has
+		// the source text to substring-check against). The daemon's job is
+		// to pass candidates through with consistent casing.
 		mems = append(mems, Memory{
 			Type:        typ,
 			Content:     content,
+			Evidence:    strings.TrimSpace(m.Evidence),
+			Speaker:     strings.ToLower(strings.TrimSpace(m.Speaker)),
+			SupportKind: strings.ToLower(strings.TrimSpace(m.SupportKind)),
 			IsStatic:    m.IsStatic,
 			IsInference: m.IsInference,
 			Confidence:  confidence,

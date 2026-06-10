@@ -69,6 +69,9 @@ type openaiChatRequest struct {
 	Messages       []openaiMessage `json:"messages"`
 	Temperature    float64         `json:"temperature"`
 	ResponseFormat *openaiFormat   `json:"response_format,omitempty"`
+	// Grammar is a llama-server extension (GBNF). Only the llama.cpp
+	// backend sets it; omitempty keeps cloud provider requests clean.
+	Grammar string `json:"grammar,omitempty"`
 }
 
 type openaiFormat struct {

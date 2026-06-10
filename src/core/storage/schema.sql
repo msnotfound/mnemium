@@ -6,7 +6,7 @@
 
 PRAGMA journal_mode = WAL;
 PRAGMA foreign_keys = ON;
-PRAGMA user_version = 1;
+PRAGMA user_version = 2;
 
 -- key/value: active embedder id, schema bookkeeping, bandit weights blob, etc.
 CREATE TABLE IF NOT EXISTS meta (
@@ -55,12 +55,38 @@ CREATE TABLE IF NOT EXISTS memory (
   is_forgotten     INTEGER NOT NULL DEFAULT 0,
   reuse_count      INTEGER NOT NULL DEFAULT 0,
   source_count     INTEGER NOT NULL DEFAULT 1,
-  created_at       INTEGER NOT NULL
+  created_at       INTEGER NOT NULL,
+  -- trust fields (v2): evidence-bound extraction + claim lifecycle
+  evidence         TEXT,                          -- verbatim source span backing the claim
+  speaker          TEXT,                          -- user|assistant — who said the evidence
+  support_kind     TEXT,                          -- exact|paraphrase|inferred
+  claim_status     TEXT NOT NULL DEFAULT 'active' -- active|pending_review (rejected lives in memory_rejection)
 );
 -- typed-retrieval scoping; version-chain rebuild; active-set + expiry sweep
 CREATE INDEX IF NOT EXISTS idx_memory_scope_type ON memory(scope_uri, type, is_latest);
 CREATE INDEX IF NOT EXISTS idx_memory_chain      ON memory(root_memory_id, version);
 CREATE INDEX IF NOT EXISTS idx_memory_active      ON memory(scope_uri, is_latest, forget_after);
+CREATE INDEX IF NOT EXISTS idx_memory_claim       ON memory(claim_status);
+
+-- Validator audit trail. Rejected candidates are NOT memories — keeping them
+-- out of `memory` means no retrieval/export/supersede path can leak them by
+-- a missed claim_status filter. This table is append-only and UI-facing
+-- ("why was this dropped?"), never searched by retrieval.
+CREATE TABLE IF NOT EXISTS memory_rejection (
+  id           TEXT PRIMARY KEY,
+  scope_uri    TEXT NOT NULL,
+  provider     TEXT,
+  thread_id    TEXT,
+  message_id   TEXT,
+  type         TEXT,
+  content      TEXT NOT NULL,
+  evidence     TEXT,
+  speaker      TEXT,
+  support_kind TEXT,
+  reason       TEXT NOT NULL,                     -- validator rule that fired
+  created_at   INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_rejection_scope ON memory_rejection(scope_uri, created_at);
 
 -- M:N corroboration link (one chunk -> many memories; one memory <- many chunks)
 CREATE TABLE IF NOT EXISTS memory_source (
