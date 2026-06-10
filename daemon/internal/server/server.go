@@ -63,10 +63,18 @@ func New(cfg config.Config, creds pairing.Credentials, version string, paths xdg
 }
 
 // Reconfigure swaps backends in place after a PUT /config call. Closes
-// the old set and replaces it with a freshly-resolved one. Returns the
-// new effective config.
+// the old set and replaces it with a freshly-resolved one. If the new
+// backends spec is identical to the old one (same kind/model/endpoint/
+// threads/ctx for all three), it's a no-op — onboarding flows can PUT
+// /config repeatedly without thrashing the backend lifecycle.
 func (s *Server) Reconfigure(cfg config.Config) {
 	s.mu.Lock()
+	if backendsEqual(s.cfg.Backends, cfg.Backends) {
+		s.cfg.Listen = cfg.Listen
+		s.mu.Unlock()
+		log.Printf("[reconfigure] no-op (backends spec unchanged)")
+		return
+	}
 	old := s.backends
 	s.cfg = cfg
 	s.backends = backends.Resolve(cfg, s.paths)
@@ -83,6 +91,10 @@ func (s *Server) Reconfigure(cfg config.Config) {
 		defer cancel()
 		s.Warm(ctx)
 	}()
+}
+
+func backendsEqual(a, b config.Backends) bool {
+	return a.Distill == b.Distill && a.Embed == b.Embed && a.Vec == b.Vec
 }
 
 // Warm proactively spawns subprocess-backed backends (LlamaCPP). Designed

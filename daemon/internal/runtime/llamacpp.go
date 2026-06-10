@@ -268,23 +268,33 @@ func extractTarGz(archivePath, binDir string) error {
 		if err != nil {
 			return err
 		}
-		if hdr.Typeflag != tar.TypeReg && hdr.Typeflag != tar.TypeRegA {
-			continue
-		}
 		base := filepath.Base(hdr.Name)
 		isBin, isLib := isLlamaInterestingFile(base)
 		if !isBin && !isLib {
 			continue
 		}
 		dest := filepath.Join(binDir, base)
-		if err := writeFile(dest, tr); err != nil {
-			return err
-		}
-		if isBin {
-			if err := os.Chmod(dest, 0o755); err != nil {
+		switch hdr.Typeflag {
+		case tar.TypeReg, tar.TypeRegA:
+			if err := writeFile(dest, tr); err != nil {
 				return err
 			}
-			wroteBinary = true
+			if isBin {
+				if err := os.Chmod(dest, 0o755); err != nil {
+					return err
+				}
+				wroteBinary = true
+			}
+		case tar.TypeSymlink:
+			// Symlinks carry the soname aliases (e.g. libllama.so.0 →
+			// libllama.so.0.0.9585). Without them llama-server's dynamic
+			// loader can't resolve its own deps and the binary fails to
+			// start with 'cannot open shared object file'. Remove existing
+			// entry first so re-install works.
+			_ = os.Remove(dest)
+			if err := os.Symlink(hdr.Linkname, dest); err != nil {
+				return fmt.Errorf("symlink %s → %s: %w", dest, hdr.Linkname, err)
+			}
 		}
 	}
 	if !wroteBinary {

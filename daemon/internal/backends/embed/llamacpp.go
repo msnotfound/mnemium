@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/msnotfound/mnemium/daemon/internal/runtime"
@@ -27,12 +28,15 @@ type LlamaCPP struct {
 	binPath   string
 	threads   int
 
-	mu      sync.Mutex
-	proc    *exec.Cmd
-	port    int
-	client  *http.Client
-	started bool
-	dim     int
+	mu     sync.Mutex
+	proc   *exec.Cmd
+	port   int
+	client *http.Client
+	// Atomic so Ready() / Dim() are lock-free reads. /status polls these
+	// every ~2s and must not block on Warm() (which holds l.mu during
+	// the up-to-60s healthcheck loop).
+	started atomic.Bool
+	dim     atomic.Int32
 }
 
 func NewLlamaCPP(modelsDir, binDir, model string, threads int) (*LlamaCPP, error) {
@@ -63,17 +67,13 @@ func NewLlamaCPP(modelsDir, binDir, model string, threads int) (*LlamaCPP, error
 }
 
 func (l *LlamaCPP) Ready() bool {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	return l.started
+	return l.started.Load()
 }
 
 func (l *LlamaCPP) Model() string { return filepath.Base(l.modelPath) }
 
 func (l *LlamaCPP) Dim() int {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	return l.dim
+	return int(l.dim.Load())
 }
 
 // Warm spawns llama-server --embedding proactively so the first /embed
@@ -85,7 +85,7 @@ func (l *LlamaCPP) Warm(ctx context.Context) error {
 }
 
 func (l *LlamaCPP) ensureStarted(ctx context.Context) error {
-	if l.started && l.proc != nil && l.proc.ProcessState == nil {
+	if l.started.Load() && l.proc != nil && l.proc.ProcessState == nil {
 		return nil
 	}
 	port, err := pickFreePort()
@@ -117,7 +117,7 @@ func (l *LlamaCPP) ensureStarted(ctx context.Context) error {
 	deadline := time.Now().Add(60 * time.Second)
 	for time.Now().Before(deadline) {
 		if l.healthy(ctx) {
-			l.started = true
+			l.started.Store(true)
 			log.Printf("[embed/llama-cpp] ready in %s (port=%d model=%s)", time.Since(startedAt).Round(time.Millisecond), port, filepath.Base(l.modelPath))
 			return nil
 		}
@@ -195,9 +195,7 @@ func (l *LlamaCPP) Embed(ctx context.Context, texts []string) ([][]float32, erro
 		result[idx] = row.Embedding
 	}
 	if len(result) > 0 && len(result[0]) > 0 {
-		l.mu.Lock()
-		l.dim = len(result[0])
-		l.mu.Unlock()
+		l.dim.Store(int32(len(result[0])))
 	}
 	return result, nil
 }
@@ -221,7 +219,7 @@ func (l *LlamaCPP) killUnlocked() error {
 		_ = l.proc.Process.Kill()
 		<-done
 	}
-	l.started = false
+	l.started.Store(false)
 	l.proc = nil
 	l.port = 0
 	return nil

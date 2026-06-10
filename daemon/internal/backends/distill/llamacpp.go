@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/msnotfound/mnemium/daemon/internal/runtime"
@@ -36,11 +37,15 @@ type LlamaCPP struct {
 	threads   int
 	ctxSize   int
 
-	mu      sync.Mutex
-	proc    *exec.Cmd
-	port    int
-	client  *http.Client
-	started bool
+	mu     sync.Mutex
+	proc   *exec.Cmd
+	port   int
+	client *http.Client
+	// started is atomic so Ready() is a lock-free read. While Warm() runs
+	// (up to 60s holding l.mu during healthcheck polling), Ready() must
+	// stay fast — /status calls it every couple of seconds and would
+	// otherwise time out the extension.
+	started atomic.Bool
 }
 
 // NewLlamaCPP constructs the wrapper. Doesn't spawn yet.
@@ -87,9 +92,7 @@ func NewLlamaCPP(modelsDir, binDir, model string, threads, ctxSize int) (*LlamaC
 }
 
 func (l *LlamaCPP) Ready() bool {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	return l.started
+	return l.started.Load()
 }
 
 func (l *LlamaCPP) Model() string { return filepath.Base(l.modelPath) }
@@ -106,7 +109,7 @@ func (l *LlamaCPP) Warm(ctx context.Context) error {
 // ensureStarted spawns llama-server if it isn't already up. Caller must
 // hold l.mu.
 func (l *LlamaCPP) ensureStarted(ctx context.Context) error {
-	if l.started && l.proc != nil && l.proc.ProcessState == nil {
+	if l.started.Load() && l.proc != nil && l.proc.ProcessState == nil {
 		return nil
 	}
 	port, err := pickFreePort()
@@ -139,7 +142,7 @@ func (l *LlamaCPP) ensureStarted(ctx context.Context) error {
 	deadline := time.Now().Add(60 * time.Second)
 	for time.Now().Before(deadline) {
 		if l.healthy(ctx) {
-			l.started = true
+			l.started.Store(true)
 			log.Printf("[distill/llama-cpp] ready in %s (port=%d model=%s)", time.Since(startedAt).Round(time.Millisecond), port, filepath.Base(l.modelPath))
 			return nil
 		}
@@ -233,7 +236,7 @@ func (l *LlamaCPP) killUnlocked() error {
 		_ = l.proc.Process.Kill()
 		<-done
 	}
-	l.started = false
+	l.started.Store(false)
 	l.proc = nil
 	l.port = 0
 	return nil
