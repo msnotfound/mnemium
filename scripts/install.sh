@@ -76,8 +76,8 @@ fi
 
 sums_url=$(printf '%s' "$release_json" \
     | tr ',' '\n' \
-    | grep -F '"name": "checksums.txt"' \
     | grep browser_download_url \
+    | grep -F '/checksums.txt"' \
     | head -1 \
     | sed -n 's/.*"\(https:[^"]*\)".*/\1/p')
 
